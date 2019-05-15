@@ -65,9 +65,7 @@ class IDSuEye(microscope.devices.TriggerTargetMixIn,
             raise RuntimeError('no cameras found')
 
         if serial_number is None:
-            ## FIXME: this is bullshit.  Only works with one camera.
-            ## If zero is used as device ID during initialisation, the
-            ## next available camera is picked.
+            ## InitCamera will set the handle to the device ID
             self._handle = ueye.HIDS(0)
         else:
             for info in _get_info_of_all_cameras():
@@ -77,9 +75,8 @@ class IDSuEye(microscope.devices.TriggerTargetMixIn,
             else:
                 raise RuntimeError("No camera found with serial number '%s'"
                                    % serial_number)
+            self._handle = ueye.HIDS(self._handle.value | ueye.USE_DEVICE_ID)
 
-        ## InitCamera will set the handle back to the device ID
-        self._handle = ueye.HIDS(self._handle.value | ueye.USE_DEVICE_ID)
         status = ueye.InitCamera(ctypes.byref(self._handle), None)
         if status != ueye.SUCCESS:
             raise RuntimeError('failed to init camera (error code %d)' % status)
