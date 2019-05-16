@@ -27,7 +27,6 @@
 """
 
 import ctypes
-import ctypes.wintypes
 import typing
 from typing import Tuple
 
@@ -39,6 +38,7 @@ from microscope._wrappers import ueye
 
 import platform
 if platform.system() == 'Windows':
+    import ctypes.wintypes
     import win32event
     import win32api
 
@@ -352,10 +352,10 @@ class IDSuEye(microscope.devices.TriggerTargetMixIn,
         ## acquisition rates.  To achive faster speeds we need to set
         ## a ring buffer and maybe consider making use of freerun
         ## mode.
-        if self._h_event is None:
-            return None
 
         if platform.system() == 'Windows':
+            if self._h_event is None:
+                return None
             status = win32event.WaitForSingleObject(self._h_event, 1)
             if status==win32event.WAIT_TIMEOUT:
                 return None
@@ -380,14 +380,15 @@ class IDSuEye(microscope.devices.TriggerTargetMixIn,
         status = ueye.DisableEvent(self._handle, ueye.SET_EVENT_FRAME)
         if status != ueye.SUCCESS:
             raise RuntimeError()
-        status = ueye.ExitEvent(self._handle, ueye.SET_EVENT_FRAME)
-        if status != ueye.SUCCESS:
-            raise RuntimeError()
+
         if platform.system()=='Windows':
+            status = ueye.ExitEvent(self._handle, ueye.SET_EVENT_FRAME)
+            if status != ueye.SUCCESS:
+                raise RuntimeError()
             status = win32api.CloseHandle(self._h_event)
-        self._h_event = None
-        if status == 0:
-            raise RuntimeError()
+            self._h_event = None
+            if status == 0:
+                raise RuntimeError()
         return data
 
 
