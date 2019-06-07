@@ -20,6 +20,7 @@ import io
 
 import Pyro4
 import serial
+import time
 
 from microscope.devices import FilterWheelBase
 
@@ -37,7 +38,7 @@ class ThorlabsFilterWheel(FilterWheelBase):
         :param timeout: serial timeout
         :keyword filters: optional list of filters
         """
-        super().__init__(com, baud, timeout, **kwargs)
+        super().__init__(**kwargs)
         self.eol = '\r'
         # The EOL character means the serial connection must be wrapped in a
         # TextIOWrapper.
@@ -61,7 +62,7 @@ class ThorlabsFilterWheel(FilterWheelBase):
     def set_position(self, n):
         """Public method to move to position n."""
         command = 'pos=%d' % n
-        self.connection.write(unicode(command + self.eol))
+        self.connection.write(command + self.eol)
         # The serial connection will timeout until new position is reached.
         # Count timeouts to detect failure to return to responsive state.
         count = 0
@@ -89,7 +90,7 @@ class ThorlabsFilterWheel(FilterWheelBase):
     def _send_command(self, command):
         """Send a command and return any result."""
         result = None
-        self.connection.write(unicode(command + self.eol))
+        self.connection.write(command + self.eol)
         response = 'dummy'
         while response not in [command, '']:
             # Read until we receive the command echo.

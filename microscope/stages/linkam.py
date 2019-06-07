@@ -900,7 +900,7 @@ _StageValueTypeToVariant = {
 }
 
 
-class LinkamBase(devices.Device):
+class LinkamBase(devices.FloatingDeviceMixin, devices.Device):
     """Base class for connecting to Linkam SDK devices.
     
     This class deals with SDK initialisation and setting callbacks to 
@@ -1169,7 +1169,9 @@ class LinkamBase(devices.Device):
         # suggest that an OpenComms message should open a connection to the 
         # device with that serial number; with only one stage attached, it
         # appears that OpenComms ignores the value of serialNumber.
-        if not isinstance(uid, bytes):
+        if uid is None:
+            uid = b''
+        elif not isinstance(uid, bytes):
             uid = uid.encode()
         self._lib.linkamInitialiseUSBCommsInfo(byref(self._commsinfo), ctypes.c_char_p(uid))
 
@@ -1241,7 +1243,7 @@ class LinkamMDSMixin():
             self.set_value(_StageValueType.MotorSetpointZ, z)
             self._process_msg(Msg.StartMotors, True, 2)
         # Allow time for status structures to indicate stage is moving
-        time.sleep(2 * self.get_data_rate())
+        time.sleep(5 * self.get_data_rate())
 
     def get_status(self, *args):
         """Includes MDSStatus in the get_status call."""
@@ -1258,7 +1260,7 @@ class LinkamMDSMixin():
         return pos
 
 
-class LinkamCMS(LinkamMDSMixin, LinkamBase, devices.FloatingDeviceMixin):
+class LinkamCMS(LinkamMDSMixin, LinkamBase):
     """Linkam correlative-microscopy stage."""
     _refill_map = {'sample': 'sampleDewarFillSignal',
                    'external': 'mainDewarFillSignal'}
@@ -1295,9 +1297,9 @@ class LinkamCMS(LinkamMDSMixin, LinkamBase, devices.FloatingDeviceMixin):
             return "refilling: %s, t: %s, dt: %s" % (self.refilling, self.t, self.dt)
 
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, uid='', *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.uid = kwargs.get('uid', '')
+        self.uid = uid
         self.init_usb(self.uid)
         self._cmsstatus = _CMSStatus()
         self._cmserror = _CMSError()
