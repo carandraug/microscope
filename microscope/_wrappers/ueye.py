@@ -433,5 +433,12 @@ SetImageMem = prototype('is_SetImageMem',
 
 StopLiveVideo = prototype('is_StopLiveVideo', [HIDS, INT])
 
+AddToSequence = prototype('is_AddToSequence', [HIDS,
+                                               ctypes.POINTER(ctypes.c_char),
+                                               ctypes.c_int])
+
+ClearSequence = prototype('is_ClearSequence', [HIDS])
+
+
 if platform.system() != 'Windows':
     WaitEvent = prototype('is_WaitEvent', [HIDS, INT, INT])
