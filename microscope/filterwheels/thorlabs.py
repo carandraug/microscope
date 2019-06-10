@@ -38,7 +38,7 @@ class ThorlabsFilterWheel(FilterWheelBase):
         :param timeout: serial timeout
         :keyword filters: optional list of filters
         """
-        super().__init__(com, baud, timeout, **kwargs)
+        super().__init__(**kwargs)
         self.eol = '\r'
         # The EOL character means the serial connection must be wrapped in a
         # TextIOWrapper.
@@ -53,7 +53,7 @@ class ThorlabsFilterWheel(FilterWheelBase):
         self.connection = io.TextIOWrapper(io.BufferedRWPair(rawSerial, rawSerial, 1))
         # Last received wheel position.
 
-    def initialize(self, *args, **kwargs):
+    def initialize(self):
         pass
 
     def _on_shutdown(self):
