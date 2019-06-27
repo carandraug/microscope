@@ -20,10 +20,10 @@
 
 """Interface to IDS cameras.
 
-.. todo::
-   Make software trigger work on windows.  See the documentation for
-   `is_EnableEvent` for an example.  The code, and even the available
-   methods, is different for windows and Linux.
+The interface makes use of `is_WaitForNextImage` instead of the
+`is_EnableEvent`, `is_InitEvent`, etc... because `is_WaitForNextImage`
+is supposedly platform independent.  It is also meant to work better
+with image sequences.
 
 """
 
