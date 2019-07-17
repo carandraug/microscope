@@ -92,7 +92,7 @@ class _ImageGenerator():
             img = Image.new('L', size)
             ctx = ImageDraw.Draw(img)
             ctx.text((1, 1), text, fill=light)
-            data[0:size[1],0:size[0]] = np.asarray(img)
+#            data[0:size[1],0:size[0]] = np.asarray(img)
         return data
 
     def black(self, w, h, dark, light):

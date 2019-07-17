@@ -52,7 +52,11 @@ class IDSuEye(microscope.devices.TriggerTargetMixIn,
 
         ## Someday, we should make this a configuration.  Is there
         ## scope to make this part of the CameraDevice specification?
-        self._ring_buffer_length = 10
+        self._ring_buffer_length = 100
+        self._ring_buffer = []
+        self._ring_buffer_pointer = ctypes.pointer(ueye.INT())
+        self._ring_buffer_id_pointer = ctypes.pointer(ueye.INT())
+        self._ring_buffer_mem_pointer = ctypes.pointer(ctypes.pointer(ctypes.c_char()))
 
         if _number_of_ids_cameras() == 0:
             raise RuntimeError('no IDS cameras found')
@@ -109,23 +113,34 @@ class IDSuEye(microscope.devices.TriggerTargetMixIn,
         else:
             raise RuntimeError('no colormode of interest is supported')
 
-        self.prepare-ring-buffer()
         # for buffer in self._
-        # ## Having a fixed buffer that we keep reusing is good enough
-        # ## while we don't support ROIs, binning, and hardware trigges.
-        # colourmode = ueye.SetColorMode(self._handle, ueye.GET_COLOR_MODE)
-        # dtype = _COLOURMODE_TO_DTYPE[colourmode]
-        # self._buffer = np.empty(self._sensor_shape[::-1], dtype=dtype)
-        # buffer_p = self._buffer.ctypes.data_as(ctypes.POINTER(ctypes.c_char))
-        # mem_id = ctypes.c_int()
-        # status = ueye.SetAllocatedImageMem(self._handle, *self._sensor_shape,
-        #                                    self._buffer.itemsize * 8, buffer_p,
-        #                                    mem_id)
-        # if status != ueye.SUCCESS:
-        #     raise RuntimeError()
-        # status = ueye.SetImageMem(self._handle, buffer_p, mem_id)
-        # if status != ueye.SUCCESS:
-        #     raise RuntimeError()
+
+    def _set_ring_buffer(self) -> None:
+        colourmode = ueye.SetColorMode(self._handle, ueye.GET_COLOR_MODE)
+        for i in range(self._ring_buffer_length):
+            image_memory = _ImageMemory(self._sensor_shape, colourmode)
+            status = ueye.AddToSequence(handle, address, mem_id)
+            _check_status(status, ueye.AddToSequence)
+            self._seq[mem_id] = image_memory
+        status = ueye.InitImageQueue(self._handle, ueye.INT(0))
+        _check_status(status, ueye.InitImageQueue)
+        
+            self._ring_buffer.append(_ImageBu...)
+        ## Having a fixed buffer that we keep reusing is good enough
+        ## while we don't support ROIs, binning, and hardware trigges.
+        colourmode = ueye.SetColorMode(self._handle, ueye.GET_COLOR_MODE)
+        dtype = 
+        self._buffer = np.empty(self._sensor_shape[::-1], dtype=dtype)
+        buffer_p = self._buffer.ctypes.data_as(ctypes.POINTER(ctypes.c_char))
+        mem_id = ctypes.c_int()
+        status = ueye.SetAllocatedImageMem(self._handle, *self._sensor_shape,
+                                           self._buffer.itemsize * 8, buffer_p,
+                                           mem_id)
+        if status != ueye.SUCCESS:
+            raise RuntimeError()
+        status = ueye.SetImageMem(self._handle, buffer_p, mem_id)
+        if status != ueye.SUCCESS:
+            raise RuntimeError()
 
 
     def initialize(self) -> None:
@@ -157,6 +172,7 @@ class IDSuEye(microscope.devices.TriggerTargetMixIn,
     def enable(self) -> None:
         ## FIXME: parent only sets to return of _on_enable, but should
         ## probably do it unless there's an error?
+        self._set_ring_buffer()
         super().enable()
         self.enabled = True
 
@@ -335,19 +351,20 @@ class IDSuEye(microscope.devices.TriggerTargetMixIn,
 
 
     def _fetch_data(self) -> typing.Optional[np.ndarray]:
-        ## FIXME: this is enough for software trigger and "slow"
-        ## acquisition rates.  To achive faster speeds we need to set
-        ## a ring buffer and maybe consider making use of freerun
-        ## mode.
-        status = ueye.WaitEvent(self._handle, ueye.SET_EVENT_FRAME, 1)
+        ## TODO: we set timeout to 0 but is that right? Should we set
+        ## to 1?
+        status = ueye.WaitForNextImage(self._handle, 0,
+                                       self._fetch_mem_address,
+                                       self._fetch_id_pointer)
         if status == ueye.TIMED_OUT:
             return None
         elif status == ueye.SUCCESS:
-            data = self.read-next-in-buffer
-            data = self._buffer.copy()
-            status = ueye.DisableEvent(self._handle, ueye.SET_EVENT_FRAME)
-            if status != ueye.SUCCESS:
-                raise RuntimeError('failed to disable event')
+            ## TODO: set ring buffer in a dictionary, so we can use
+            ## the id to get the numpy. Much easier to handle memory
+            ## address manually.
+            
+            data = self._ring_buffer[self._fetch_id_pointer.contents.value].copy()
+            status = ueye.UnlockSeqBuf() #HIDS hCam, INT nNum, char* pcMem)
             return data
         else:
             ## Does this fails if we never set a an event in the first place?
@@ -361,9 +378,6 @@ class IDSuEye(microscope.devices.TriggerTargetMixIn,
                                % self._trigger_type)
         ## XXX: to support START/STROBE modes, I think we need to call
         ## CaptureVideo instead.
-        status = ueye.EnableEvent(self._handle, ueye.SET_EVENT_FRAME)
-        if status != ueye.SUCCESS:
-            raise RuntimeError()
         status = ueye.FreezeVideo(self._handle, ueye.DONT_WAIT)
         if status != ueye.SUCCESS:
             ## if status == 108, it's because there is no active memory
@@ -440,9 +454,9 @@ _VERT_BINNING_TO_FLAG = {v:k for k, v in _FLAG_TO_VERT_BINNING.items()}
 
 
 _COLOURMODE_TO_DTYPE = {
-    ueye.CM_MONO10 : np.uint16,
-    ueye.CM_MONO12 : np.uint16,
     ueye.CM_MONO16 : np.uint16,
+    ueye.CM_MONO12 : np.uint16,
+    ueye.CM_MONO10 : np.uint16,
     ueye.CM_MONO8 : np.uint8,
 } # type: typing.Mapping[int, np.dtype]
 
@@ -473,32 +487,30 @@ def _check_status(status: int, func: typing.Callable) -> None:
 
 
 class _ImageMemory:
-    def __init__(self, shape, colourmode):
-        colourmode = ueye.SetColorMode(camera._handle, ueye.GET_COLOR_MODE)
-        self._array = np.empty(camera._sensor_shape[::-1], dtype=dtype)
+    def __init__(self, camera_handle, shape, colourmode):
+        self._array = np.empty(shape[::-1],
+                               dtype=_COLOURMODE_TO_DTYPE[colourmode])
+        self._memory_id
+        self._data = x # numpy array
+        self._memory_pointer = x # starting position of the memory
         self._pointer = self._array.ctypes.data_as(ctypes.POINTER(ctypes.c_char))
         self._mem_id = ctypes.c_int()
-        status = ueye.SetAllocatedImageMem(camera._handle,
+        status = ueye.SetAllocatedImageMem(camera_handle,
                                            *camera._sensor_shape,
                                            self._buffer.itemsize * 8, buffer_p,
                                            self._mem_id)
-        if status != ueye.SUCCESS:
-            raise RuntimeError()
+        _check_status(status, ueye.SetAllocatedImageMem)
+
+    @property
+    def memory_id(self):
+        return self._memory_id
+
+    @property
+    def memory_address(self):
+        return self._memory_address
 
 
 class _CameraRingBuffer:
-    """Keep reading the next item.
-
-    The following actions will need to rebuild a new ring buffer:
-
-    * Close/Open the camera
-    * Change mode with different number of bytes
-    * Change ROI
-
-    The following is fine:
-    * standby
-    * change mode with same number of bytes
-    """
     def __init__(self, camera: IDSuEye, length: int) -> None:
         if length < 1:
             raise ValueError('length must be a positive integer')
