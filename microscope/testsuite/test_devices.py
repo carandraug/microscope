@@ -400,6 +400,17 @@ class TestCoboltLaser(unittest.TestCase, LaserTests, SerialDeviceTests):
         self.fake = CoboltLaserMock
 
 
+class TestCoherentObisLaser(unittest.TestCase, LaserTests, SerialDeviceTests):
+    def setUp(self):
+        from microscope.lasers.obis import CoherentObisLaser
+        from microscope.testsuite.mock_devices import CoherentObisLaserMock
+        with unittest.mock.patch('microscope.lasers.obis.serial.Serial',
+                                 new=CoherentObisLaserMock):
+            self.device = CoherentObisLaser('/dev/null')
+        self.device.initialize()
+
+        self.fake = CoherentObisLaser
+
 class TestOmicronDeepstarLaser(unittest.TestCase, LaserTests,
                                SerialDeviceTests):
     def setUp(self):

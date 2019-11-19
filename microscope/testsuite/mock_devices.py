@@ -706,3 +706,134 @@ class OmicronDeepstarLaserMock(SerialMock):
                                       % command.decode('utf-8'))
 
         self.in_buffer.write(answer + self.eol)
+
+
+class CoherentObisLaserMock(SerialMock):
+    eol = b'\r\n'
+
+    ## Communication parameters
+    baudrate = 115200
+    parity = serial.PARITY_NONE
+    bytesize = serial.EIGHTBITS
+    stopbits = serial.STOPBITS_ONE
+    rtscts = False
+    dsrdtr = False
+
+    ## Laser is 200mW, range is 10 to 110%
+    default_power = 50.0
+    min_power = 20.0
+    max_power = 220.0
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.laser_on = False
+
+        self.power = self.default_power
+
+        ## When enabled, the device transmits, in response to each
+        ## received command or query, one of the handshaking strings
+        ## described under "Message Completion Handshake" (p. 7-4).
+        self.handshaking = True
+
+        ## When enabled the device outputs a command prompt after each
+        ## reply string.  The command prompt is preceded by a carriage
+        ## return and line feed, and consists of a '>' character and a
+        ## space character.
+        self.prompt = False
+
+    def handle(self, command):
+
+        if command == b'SYSTem:INFormation:MODel?':
+            answer = b'OBIS MINI-CONTROLLER'
+        elif command == b'SYSTem:INFormation:SNUMber?':
+            answer = b'M170508018'
+        elif command == b'SYSTem:INFormation:PVERsion?':
+            answer = b'v1.0.0'
+        elif command == b'SYSTem:INFormation:WAVElength?':
+            answer = b'406'
+        elif command == b'SYSTem:INFormation:TYPe?':
+            answer = b'MINI'
+
+        elif command in [b'*IDN?', b'*IDN0?']:
+            answer = b'Coherent, Inc. - OBIS MINI-CONTROLLER - v2.0.2 - 20120416'
+        elif command == b'*IDN1?':
+            answer = b'Coherent, Inc - 405-200C - V2.2.0 - 20150721'
+
+        elif command == b'SYSTem:CDRH?':
+            answer = b''
+        elif command == b'*TST?':
+            answer = b''
+        elif command == b'SYSTem:AUTostart?':
+            answer = b''
+
+        elif command == b'SOURce:TEMPerature:APRobe?':
+            answer = b''
+        elif command == b'SOURce:TEMPerature:APRobe ON':
+            answer = b''
+        elif command == b'SOURce:TEMPerature:APRobe OFF':
+            answer = b''
+
+        elif command == b'SYSTem:STATus?':
+            answer = b''
+        elif command == b'SYSTem:FAULt?':
+            answer = b''
+        elif command == b'SYSTem:HOURs?':
+            answer = b''
+
+        elif command == b'SOURce:AM:STATe?':
+            answer = ''
+        elif command == b'SOURce:AM:STATe ON':
+            self.laser_on = True
+        elif command == b'SOURce:AM:STATe OFF':
+            self.laser_on = False
+
+        elif command == b'SOURce:AM:INTernal CWP':
+            answer = ''
+
+        elif command == b'SYSTem:COMMunicate:HANDshaking?':
+            answer = b'ON' if self.handshaking else b'OFF'
+        elif command == b'SYSTem:COMMunicate:HANDshaking ON':
+            self.handshaking = True
+        elif command == b'SYSTem:COMMunicate:HANDshaking OFF':
+            self.handshaking = False
+
+        elif command == b'SYSTem:COMMunicate:PROMpt?':
+            answer = b'ON' if self.prompt else b'OFF'
+        elif command == b'SYSTem:COMMunicate:PROMpt ON':
+            self.prompt = True
+        elif command == b'SYSTem:COMMunicate:PROMpt OFF':
+            self.prompt = False
+
+
+        elif command == b'SOURce:AM:EXTernal DIGital':
+            answer = ''
+
+        elif command == b'SYSTem:INFormation:POWer?':
+            answer = b'0.20000'
+
+        elif command == b'SOURce:POWer:LEVel?':
+            answer = ''
+        elif command == b'SOURce:POWer:LIMit:LOW?':
+            answer = b'0.00000'
+        elif command == b'SOURce:POWer:LIMit:HIGH?':
+            answer = b'0.22000'  # FIXME still returns OK with handshaking off
+
+        elif command == b'SOURce:POWer:LEVel:IMMediate:AMPLitude?':
+            answer = b''
+        elif command.startswith(b'SOURce:POWer:LEVel:IMMediate:AMPLitude '):
+            new_power = command[39:]
+            answer = ''
+
+        else:
+            raise NotImplementedError("no handling for command '%s'"
+                                      % command.decode())
+
+        ## A command can be sent with '\n' only but responses always
+        ## end with '\r\n'
+        self.in_buffer.write(answer + b'\r\n')
+
+        if self.handshaking:
+            self.in_buffer.write(b'OK\r\n')
+        if self.prompt:
+            self.in_buffer.write(b'\r\n> ')
