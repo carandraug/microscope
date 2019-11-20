@@ -6,7 +6,9 @@ Version 0.4.0 (upcoming)
 
 * New devices supported:
 
-  * Coherent Obis laser.
+  * Coherent Obis laser
+  * Zaber filter wheels
+  * Zaber filter cube turrets
 
 * Changes to device ABCs:
 
