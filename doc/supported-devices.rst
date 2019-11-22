@@ -45,3 +45,8 @@ Lasers
 - Coherent Sapphire (:class:`microscope.lasers.sapphire`)
 - Coherent Obis (:class:`microscope.lasers.obis`)
 - Omicron Deepstar (:class:`microscope.lasers.deepstar`)
+
+Stages
+------
+
+- Zaber (:class:`microscope.controllers.zaber`)
