@@ -952,8 +952,8 @@ class DeformableMirror(Device, metaclass=abc.ABCMeta):
         """
         super().__init__(**kwargs)
 
-        self._patterns = None  # type: typing.Optional[numpy.ndarray]
-        self._pattern_idx = -1  # type: int
+        self._patterns: typing.Optional[numpy.ndarray] = None
+        self._pattern_idx = -1
 
     @property
     def n_actuators(self) -> int:
@@ -1147,3 +1147,44 @@ class ControllerDevice(Device, metaclass=abc.ABCMeta):
         for d in self.devices.values():
             d.shutdown()
         super()._on_shutdown()
+
+
+class StageAxis(metaclass=abc.ABCMeta):
+
+    @abc.abstractmethod
+    def move(self, delta: float) -> None:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def move_to(self, pos: float) -> None:
+        raise NotImplementedError()
+
+    @property
+    @abc.abstractmethod
+    def position(self) -> float:
+        raise NotImplementedError()
+
+
+class StageDevice(Device, metaclass=abc.ABCMeta):
+    """A device that can move, possibly with multiple axis.
+    """
+
+    @property
+    @abc.abstractmethod
+    def axes(self) -> typing.Mapping[str, StageAxis]:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def move(self, delta: typing.Mapping[str, float]) -> None:
+        # TODO: once we have adefined interface, we could have a
+        # software fallback that moves the individual axis.
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def move_to(self, position: typing.Mapping[str, float]) -> None:
+        raise NotImplementedError()
+
+    @property
+    @abc.abstractmethod
+    def position(self) -> typing.Mapping[str, float]:
+        raise NotImplementedError()

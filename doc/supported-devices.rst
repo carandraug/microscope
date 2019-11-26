@@ -39,3 +39,8 @@ Lasers
 - Coherent Sapphire (:class:`microscope.lasers.sapphire`)
 - Coherent Obis (:class:`microscope.lasers.obis`)
 - Omicron Deepstar (:class:`microscope.lasers.deepstar`)
+
+Controllers
+-----------
+
+- Prior ProScan III (:class:`microscope.controllers.prior`)
