@@ -22,6 +22,7 @@
 import logging
 import random
 import time
+import typing
 
 import numpy as np
 from PIL import Image, ImageFont, ImageDraw
@@ -502,3 +503,23 @@ class DummyDSP(devices.Device):
     def set_client(self, *args, **kwargs):
         ## XXX: maybe this should be on its own mixin instead of on DataDevice
         return devices.DataDevice.set_client(self, *args, **kwargs)
+
+
+class TestController(devices.ControllerDevice):
+    """Test controller device.
+
+    Args:
+        sub_devices (list): a list of three elements tuples defining
+            the name, class, and keyword arguments to construct the
+            controlled devices.  This is a list so it can control the
+            order that the devices get created.
+    """
+    def __init__(self, sub_devices, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._devices = {}
+        for sub_name, sub_cls, sub_kwargs in sub_devices:
+            self._devices[sub_name] = sub_cls(**sub_kwargs)
+
+    @property
+    def devices(self) -> typing.Mapping[str, devices.Device]:
+        return self._devices
