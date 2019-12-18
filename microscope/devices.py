@@ -75,7 +75,10 @@ DTYPES = {'int': ('int', tuple),
 _call_if_callable = lambda f: f() if callable(f) else f
 
 
-class Setting():
+class _Setting():
+    # TODO: refactor into subclasses to avoid if isinstance .. elif .. else.
+    # Settings classes should be private: devices should use a factory method
+    # rather than instantiate settings directly; most already use add_setting for this.
     def __init__(self, name, dtype, get_func, set_func=None, values=None, readonly=False):
         """Create a setting.
 
@@ -149,7 +152,7 @@ class Setting():
             return [(v.value, v.name) for v in self._values]
         values = _call_if_callable(self._values)
         if values is not None:
-            if self.dtype is 'enum':
+            if self.dtype == 'enum':
                 if isinstance(values, dict):
                     return list(values.items())
                 else:
@@ -202,7 +205,7 @@ class Device(metaclass=abc.ABCMeta):
     def __init__(self, index=None):
         self.enabled = None
         # A list of settings. (Can't serialize OrderedDict, so use {}.)
-        self.settings = OrderedDict()
+        self._settings = OrderedDict()
         self._index = index
 
     def __del__(self):
@@ -265,8 +268,6 @@ class Device(metaclass=abc.ABCMeta):
     def add_setting(self, name, dtype, get_func, set_func, values, readonly=False):
         """Add a setting definition.
 
-        Can also use self.settings[name] = Setting(name, dtype,...)
-
         :param name: the setting's name
         :param dtype: a data type from ('int', 'float', 'bool', 'enum', 'str')
         :param get_func: a function to get the current value
@@ -290,12 +291,13 @@ class Device(metaclass=abc.ABCMeta):
             raise Exception("Invalid values type for %s '%s': expected function or %s" %
                             (dtype, name, DTYPES[dtype][1:]))
         else:
-            self.settings[name] = Setting(name, dtype, get_func, set_func, values, readonly)
+            self._settings[name] = _Setting(name, dtype, get_func, set_func,
+                                            values, readonly)
 
     def get_setting(self, name):
         """Return the current value of a setting."""
         try:
-            return self.settings[name].get()
+            return self._settings[name].get()
         except Exception as err:
             _logger.error("in get_setting(%s):" % (name), exc_info=err)
             raise
@@ -303,7 +305,7 @@ class Device(metaclass=abc.ABCMeta):
     def get_all_settings(self):
         """Return ordered settings as a list of dicts."""
         try:
-            return {k: v.get() for k, v in self.settings.items()}
+            return {k: v.get() for k, v in self._settings.items()}
         except Exception as err:
             _logger.error("in get_all_settings:", exc_info=err)
             raise
@@ -311,24 +313,24 @@ class Device(metaclass=abc.ABCMeta):
     def set_setting(self, name, value):
         """Set a setting."""
         try:
-            self.settings[name].set(value)
+            self._settings[name].set(value)
         except Exception as err:
             _logger.error("in set_setting(%s):" % (name), exc_info=err)
             raise
 
     def describe_setting(self, name):
         """Return ordered setting descriptions as a list of dicts."""
-        return self.settings[name].describe()
+        return self._settings[name].describe()
 
     def describe_settings(self):
         """Return ordered setting descriptions as a list of dicts."""
-        return [(k, v.describe()) for (k, v) in self.settings.items()]
+        return [(k, v.describe()) for (k, v) in self._settings.items()]
 
     def update_settings(self, incoming, init=False):
         """Update settings based on dict of settings and values."""
         if init:
             # Assume nothing about state: set everything.
-            my_keys = set(self.settings.keys())
+            my_keys = set(self._settings.keys())
             their_keys = set(incoming.keys())
             update_keys = my_keys & their_keys
             if update_keys != my_keys:
@@ -338,24 +340,24 @@ class Device(metaclass=abc.ABCMeta):
                 raise Exception(msg)
         else:
             # Only update changed values.
-            my_keys = set(self.settings.keys())
+            my_keys = set(self._settings.keys())
             their_keys = set(incoming.keys())
             update_keys = set(key for key in my_keys & their_keys
                               if self.get_setting(key) != incoming[key])
         results = {}
         # Update values.
         for key in update_keys:
-            if key not in my_keys or not self.settings[key].set:
+            if key not in my_keys or not self._settings[key].set:
                 # Setting not recognised or no set function implemented
                 results[key] = NotImplemented
                 update_keys.remove(key)
                 continue
-            if _call_if_callable(self.settings[key].readonly):
+            if _call_if_callable(self._settings[key].readonly):
                 continue
-            self.settings[key].set(incoming[key])
+            self._settings[key].set(incoming[key])
         # Read back values in second loop.
         for key in update_keys:
-            results[key] = self.settings[key].get()
+            results[key] = self._settings[key].get()
         return results
 
 
@@ -768,7 +770,7 @@ class CameraDevice(DataDevice):
     @abc.abstractmethod
     def _get_roi(self):
         """Return the ROI as it is on hardware."""
-        return ROI(left, top, width, height)
+        raise NotImplementedError()
 
     def get_roi(self):
         """Return ROI as a rectangle (left, top, width, height).
@@ -941,23 +943,19 @@ class DeformableMirror(Device, metaclass=abc.ABCMeta):
     def __init__(self, **kwargs) -> None:
         """Constructor.
 
-        Subclasses must define the following properties during
-        construction:
-
-            _n_actuators : int
-
-        In addition, the private properties `_patterns` and
-        `_pattern_idx` are initialized to None to support the queueing
-        of patterns and software triggering.
+        The private properties `_patterns` and `_pattern_idx` are
+        initialized to `None` to support the queueing of patterns and
+        software triggering.
         """
         super().__init__(**kwargs)
 
-        self._patterns: typing.Optional[numpy.ndarray] = None
-        self._pattern_idx = -1
+        self._patterns = None # type: typing.Optional[numpy.ndarray]
+        self._pattern_idx = -1 # type: int
 
     @property
+    @abc.abstractmethod
     def n_actuators(self) -> int:
-        return self._n_actuators
+        raise NotImplementedError()
 
     def _validate_patterns(self, patterns: numpy.ndarray) -> None:
         """Validate the shape of a series of patterns.
@@ -971,10 +969,10 @@ class DeformableMirror(Device, metaclass=abc.ABCMeta):
         if patterns.ndim > 2:
             raise Exception("PATTERNS has %d dimensions (must be 1 or 2)"
                             % patterns.ndim)
-        elif patterns.shape[-1] != self._n_actuators:
+        elif patterns.shape[-1] != self.n_actuators:
             raise Exception(("PATTERNS length of second dimension '%d' differs"
                              " differs from number of actuators '%d'"
-                             % (patterns.shape[-1], self._n_actuators)))
+                             % (patterns.shape[-1], self.n_actuators)))
 
     @abc.abstractmethod
     def apply_pattern(self, pattern: numpy.ndarray) -> None:
@@ -1076,7 +1074,8 @@ class LaserDevice(Device, metaclass=abc.ABCMeta):
 
 
 class FilterWheelBase(Device, metaclass=abc.ABCMeta):
-    def __init__(self, filters=[], positions=0, **kwargs):
+    def __init__(self, filters: typing.Union[typing.Mapping[int, str], typing.Iterable] = [],
+                 positions: int = 0, **kwargs) -> None:
         super().__init__(**kwargs)
         if isinstance(filters, dict):
             self._filters = filters
@@ -1084,7 +1083,7 @@ class FilterWheelBase(Device, metaclass=abc.ABCMeta):
             self._filters = {i:f for (i, f) in enumerate(filters)}
         self._inv_filters = {val: key for key, val in self._filters.items()}
         if not hasattr(self, '_positions'):
-            self._positions = positions
+            self._positions = positions # type: int
         # The position as an integer.
         # Deprecated: clients should call get_position and set_position;
         # still exposed as a setting until cockpit uses set_position.
@@ -1095,21 +1094,21 @@ class FilterWheelBase(Device, metaclass=abc.ABCMeta):
                          lambda: (0, self.get_num_positions()) )
 
 
-    def get_num_positions(self):
+    def get_num_positions(self) -> int:
         """Returns the number of wheel positions."""
         return(max( self._positions, len(self._filters)))
 
     @abc.abstractmethod
-    def get_position(self):
+    def get_position(self) -> int:
         """Return the wheel's current position"""
         return 0
 
     @abc.abstractmethod
-    def set_position(self, position):
+    def set_position(self, position: int) -> None:
         """Set the wheel position."""
         pass
 
-    def get_filters(self):
+    def get_filters(self) -> typing.List[typing.Tuple[int, str]]:
         return [(k,v) for k,v in self._filters.items()]
 
 

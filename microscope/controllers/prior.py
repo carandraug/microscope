@@ -28,7 +28,6 @@ filter filterwheel, filter position 8 when connected to filter 1 and
 2, is filter position 4 when connected to A axis (filter 3).
 
 filter 3 is when connected to A axis.
-
 """
 
 import contextlib
@@ -41,12 +40,22 @@ import microscope.devices
 
 
 class _ProScanIIIConnection:
-    """Wraps the ProScanIII serial commands.
+    """Connection to a Prior ProScanIII and wrapper to its commands.
+
+    Devices that are controlled by the same controller should share
+    the same connection instance to ensure correct synchronization of
+    communications from different threads.  This ensures that commands
+    for different devices, or replies from different devices, don't
+    get entangled.
+
+    This class also implements the logic to parse and validate
+    commands so it can be shared between multiple devices.
+
     """
     def __init__(self, port: str, baudrate: int, timeout: float) -> None:
-        ## From the technical datasheet: 8 bit word 1 stop bit, no
-        ## parity no handshake, baudrate options of 9600, 19200,
-        ## 38400, 57600 and 115200.
+        # From the technical datasheet: 8 bit word 1 stop bit, no
+        # parity no handshake, baudrate options of 9600, 19200, 38400,
+        # 57600 and 115200.
         self._serial = serial.Serial(port=port, baudrate=baudrate,
                                      timeout=timeout, bytesize=serial.EIGHTBITS,
                                      stopbits=serial.STOPBITS_ONE,
@@ -56,7 +65,7 @@ class _ProScanIIIConnection:
 
         with self._lock:
             # We do not use the general get_description() because if
-            # this is not a ProScan device, it would never reach the
+            # this is not a ProScan device it would never reach the
             # '\rEND\r' that signals the end of the description.
             self.command(b'?')
             answer = self.readline()
@@ -64,6 +73,7 @@ class _ProScanIIIConnection:
                 self.read_until_timeout()
                 raise RuntimeError("Not a ProScanIII device: '?' returned '%s'"
                                    % answer.decode())
+            # A description ends with END on its own line.
             line = self._serial.read_until(b'\rEND\r')
             if not line.endswith(b'\rEND\r'):
                 raise RuntimeError("Failed to clear description")
@@ -107,7 +117,7 @@ class _ProScanIIIConnection:
         # Once a movement command is issued the application should
         # wait until the end of move R response is received before
         # sending any further commands.
-        # TODO: this *10 is a bit arbitrary.
+        # TODO: this times 10 is a bit arbitrary.
         with self.changed_timeout(10 * self._serial.timeout):
             self._command_and_validate(command, b'R\r')
 
@@ -156,12 +166,13 @@ class _ProScanIIIConnection:
 
     def has_filterwheel(self, number: int) -> bool:
         self.assert_filterwheel_number(number)
-        # We use the 'FILTER w' command to check if there's a
-        # filterwheel instead of the '?' command.  The reason is that
-        # the third filterwheel, named "A Axis" on the controller box
-        # and "FOURTH" on the output of the '?' command, can be used
-        # for non filterwheels.  We hope that 'FILTER 3' will fail
-        # properly in that case.
+        # We use the 'FILTER w' command to check if there's a filter
+        # wheel instead of the '?' command.  The reason is that the
+        # third filter wheel, named "A AXIS" on the controller box and
+        # "FOURTH" on the output of the '?' command, can be used for
+        # non filter wheels.  We hope that 'FILTER 3' will fail
+        # properly if what is connected to "A AXIS" is not a filter
+        # wheel.
         return self._has_thing(b'FILTER %d' % number, b'FILTER_%d = ' % number)
 
     def has_stage(self) -> bool:
@@ -224,21 +235,40 @@ class _ProScanIIIConnection:
 
 
 class ProScanIII(microscope.devices.ControllerDevice):
-    """Prior ProScanIII Controller.
+    """Prior ProScanIII controller.
 
-    Only supports three wheels and a XY stage.  This controller is
-    also meant to support three shutters, motor stages with encoders,
-    a Z focus, and a fourth axis.  These have never been tested
-    because we don't have access to them.
+    The controlled devices have the following labels:
+
+    `filter 1`
+      Filter wheel connected to connector labelled "FILTER 1".
+    `filter 2`
+      Filter wheel connected to connector labelled "FILTER 1".
+    `filter 3`
+      Filter wheel connected to connector labelled "A AXIS".
+    `stage`
+      XY stage.
+
+    This controller is also meant to support three shutters, motor
+    stages with encoders, a Z focus, and a fourth axis.  These have
+    never been tested because we don't have access to them.
+
+    .. note::
+
+       The Prior ProScanIII can control up to three filter wheels.
+       However, a filter position may have a different number
+       dependening on which connector it is.  For example, using an 8
+       position filter wheel, what is position 1 on the filter 1 and 2
+       connectors, is position 4 when on the A axis (filter 3)
+       connector.
 
     """
     def __init__(self, port: str, baudrate: int = 9600, timeout: float = 0.5,
                  **kwargs) -> None:
         super().__init__(**kwargs)
         self._conn = _ProScanIIIConnection(port, baudrate, timeout)
-        self._devices: typing.Mapping[str, microscope.devices.Device] = {}
+        self._devices = {} # type: typing.Mapping[str, microscope.devices.Device]
 
-        # Can have up to three filterwheels, numbered 1 to 3.
+        # Can have up to three filter wheels, numbered 1 to 3.
         for number in range(1, 4):
             if self._conn.has_filterwheel(number):
                 key = 'filter %d' % number

@@ -233,7 +233,6 @@ class TestCamera(devices.CameraDevice):
             light = int(255 - 128 * np.random.rand())
             width = self._roi.width // self._binning.h
             height = self._roi.height // self._binning.v
-            size = (width, height)
             image = self._image_generator.get_image(width, height, dark, light, index=self._sent)
             self._sent += 1
             return image
@@ -375,6 +374,10 @@ class TestDeformableMirror(devices.DeformableMirror):
     def __init__(self, n_actuators, **kwargs):
         super().__init__(**kwargs)
         self._n_actuators = n_actuators
+
+    @property
+    def n_actuators(self) -> int:
+        return self._n_actuators
 
     def apply_pattern(self, pattern):
         self._validate_patterns(pattern)

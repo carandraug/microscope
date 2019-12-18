@@ -29,18 +29,21 @@ Deformable Mirrors
 Filter Wheels
 -------------
 
-- Thorlabs (:class:`microscope.filterwheels.thorlabs`)
 - Aurox Clarity (:class:`microscope.filterwheels.aurox`)
+- Prior (:class:`microscope.controllers.prior`)
+- Thorlabs (:class:`microscope.filterwheels.thorlabs`)
 
 Lasers
 ------
 
 - Cobolt (:class:`microscope.lasers.cobolt`)
-- Coherent Sapphire (:class:`microscope.lasers.sapphire`)
 - Coherent Obis (:class:`microscope.lasers.obis`)
+- Coherent Sapphire (:class:`microscope.lasers.sapphire`)
 - Omicron Deepstar (:class:`microscope.lasers.deepstar`)
+- Toptica iBeam (:class:`microscope.lasers.toptica`)
 
 Controllers
 -----------
 
 - Prior ProScan III (:class:`microscope.controllers.prior`)
+- Lumencor Spectra III light engine (:class:`microscope.controllers.lumencor`)
