@@ -18,6 +18,9 @@
 
 """Prior controllers
 
+Standard mode only (compatibility mode no).
+
+
 WIP until we figure interface to stages and multi device devices.
 
 Issues:
@@ -308,9 +311,9 @@ class _ProScanIIIStage(microscope.devices.StageDevice):
         else:
             raise TypeError('invalid number of axes specified')
 
-    def move(self, delta: typing.Mapping[str, float]) -> None:
+    def move_by(self, delta: typing.Mapping[str, float]) -> None:
         """Move specified axes by the specified distance. """
-        self._move_helper('move', 'go_relative', delta)
+        self._move_helper('move_by', 'go_relative', delta)
 
     def move_to(self, position: typing.Mapping[str, float]) -> None:
         """Move specified axes by the specified distance. """
@@ -318,12 +321,20 @@ class _ProScanIIIStage(microscope.devices.StageDevice):
 
     @property
     def position(self) -> typing.Mapping[str, float]:
+        # Overload the default implementation so we can do this with a
+        # single command to the controller.
         positions = self._conn.absolute_position()
         # TODO: the controller always returns three positions, even if
         # there's no Z axis on the stage on controller.  We need to
         # check what happens when there's a Z stage connected, and
         # what happens when there is no XY stage and only a Z stage.
         return {'x' : positions[0], 'y' : positions[1]}
+
+    @property
+    def limits(self) -> typing.Mapping[str, microscope.devices.AxisLimits]:
+        # TODO: Vrey importanta
+        raise NotImplementedError()
+
 
     def _on_shutdown(self) -> None:
         super()._on_shutdown()
@@ -344,7 +355,7 @@ class _ProScanIIIStageAxis(microscope.devices.StageAxis):
         self._conn.enable_encoder(self._name, True)
         self._conn.enable_servo(self._name, False)
 
-    def move(self, delta: float) -> None:
+    def move_by(self, delta: float) -> None:
         if self._name == 'X':
             self._conn.go_relative(int(delta), 0)
         elif self._name == 'Y':
@@ -368,6 +379,11 @@ class _ProScanIIIStageAxis(microscope.devices.StageAxis):
             return float(self._conn.absolute_y_position())
         else:
             raise ValueError()
+
+    @property
+    def limits(self) -> microscope.devices.AxisLimits:
+        ## TODO: very important?????
+        raise NotImplementedError()
 
 
 class _ProScanIIIFilterWheel(microscope.devices.FilterWheelBase):
