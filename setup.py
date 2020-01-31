@@ -162,7 +162,7 @@ setuptools.setup(
 
     packages = setuptools.find_packages(),
 
-    python_requires = '>=3.6',
+    python_requires = '>=3.5',
 
     install_requires = [
         "Pyro4",
