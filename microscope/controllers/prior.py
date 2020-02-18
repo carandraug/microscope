@@ -74,6 +74,8 @@ class _ProScanIIIConnection:
             answer = self.readline()
             if answer != b'PROSCAN INFORMATION\r':
                 self.read_until_timeout()
+                ## XXX: if answer is empty, maybe there is no such prt
+                ## at all.  That's what we get when device is off.
                 raise RuntimeError("Not a ProScanIII device: '?' returned '%s'"
                                    % answer.decode())
             # A description ends with END on its own line.
