@@ -31,6 +31,8 @@ import numpy as np
 from microscope import devices
 from microscope.devices import keep_acquiring
 from microscope.devices import ROI
+from microscope.devices import TriggerMode
+from microscope.devices import TriggerType
 
 from .SDK3Cam import *
 
@@ -49,6 +51,14 @@ TRIGGER_MODES = {
     'external exposure': devices.TRIGGER_DURATION,
     'software': devices.TRIGGER_SOFT,
 }
+
+# Convert from the triggers type and mode configuration to the SDK3
+# trigger mode name.
+trigger_to_sdk3_string = {
+    (TriggerType.RISING_EDGE, TriggerMode.ONCE) : 'external',
+    (TriggerType.RISING_EDGE, TriggerMode.BULB) : 'external exposure',
+    (TriggerType.SOFTWARE, TriggerMode.ONCE) : 'software',
+} # type: typing.Mapping[typing.Tuple[TriggerType, TriggerMode], str]
 
 SDK_NAMES = {
     "_accumulate_count" : "AccumulateCount",
@@ -522,6 +532,34 @@ class AndorSDK3(devices.FloatingDeviceMixin,
 
     def get_trigger_type(self):
         return TRIGGER_MODES[self._trigger_mode.get_string().lower()]
+
+
+    @property
+    def trigger_mode(self) -> TriggerMode:
+        sdk3_mode = self._trigger_mode.get_string().lower()
+        sdk3_mode_to_microscope = {
+            'external': TriggerMode.ONCE,
+            'external start': TriggerMode.START,
+            'external exposure': TriggerMode.BULB,
+            'software': TriggerMode.ONCE,
+        }
+        return sdk3_mode_to_microscope[sdk3_mode]
+
+    @property
+    def trigger_type(self) -> TriggerType:
+        sdk3_mode = self._trigger_mode.get_string().lower()
+        if sdk3_mode == 'software':
+            return TriggerType.SOFTWARE
+        else:
+            return TriggerType.RISING_EDGE
+
+    def set_trigger(self, ttype: devices.TriggerType,
+                    tmode: devices.TriggerMode) -> None:
+        """Set device for a specific trigger.
+        """
+        sdk3_mode = trigger_to_sdk3_string[(ttype, tmode)]
+        self._trigger_mode.set_string(sdk3_mode)
+
 
     def soft_trigger(self):
         return self._software_trigger()

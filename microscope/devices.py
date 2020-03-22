@@ -195,6 +195,47 @@ class FloatingDeviceMixin(metaclass=abc.ABCMeta):
         pass
 
 
+class TriggerType(Enum):
+    SOFTWARE = 0
+    RISING_EDGE = 1
+    FALLING_EDGE = 2
+    PULSE = 3
+
+
+class TriggerMode(Enum):
+    ONCE = 1
+    BULB = 2
+    STROBE = 3
+    START = 4
+
+
+class TriggerTargetMixIn(metaclass=abc.ABCMeta):
+    """MixIn for Device that may be the target of a hardware trigger.
+
+    TODO: need some way to retrieve the supported trigger types and
+        modes.  We could require subclasses to define `_trigger_types`
+        and `_trigger_modes` listing what is supported but would still
+        not be enough since often not all trigger type and mode are
+        supported.
+
+    """
+    @property
+    @abc.abstractmethod
+    def trigger_mode(self) -> TriggerMode:
+        raise NotImplementedError()
+
+    @property
+    @abc.abstractmethod
+    def trigger_type(self) -> TriggerType:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def set_trigger(self, ttype: TriggerType, tmode: TriggerMode) -> None:
+        """Set device for a specific trigger.
+        """
+        pass
+
+
 class Device(metaclass=abc.ABCMeta):
     """A base device class. All devices should subclass this class.
 
@@ -642,7 +683,7 @@ class DataDevice(Device, metaclass=abc.ABCMeta):
             self._new_data_condition.notify()
 
 
-class CameraDevice(DataDevice):
+class CameraDevice(TriggerTargetMixIn, DataDevice):
     """Adds functionality to DataDevice to support cameras.
 
     Defines the interface for cameras.
@@ -837,47 +878,6 @@ class CameraDevice(DataDevice):
 
     def soft_trigger(self):
         """Optional software trigger - implement if available."""
-        pass
-
-
-class TriggerType(Enum):
-    SOFTWARE = 0
-    RISING_EDGE = 1
-    FALLING_EDGE = 2
-    PULSE = 3
-
-
-class TriggerMode(Enum):
-    ONCE = 1
-    BULB = 2
-    STROBE = 3
-    START = 4
-
-
-class TriggerTargetMixIn(metaclass=abc.ABCMeta):
-    """MixIn for Device that may be the target of a hardware trigger.
-
-    TODO: need some way to retrieve the supported trigger types and
-        modes.  We could require subclasses to define `_trigger_types`
-        and `_trigger_modes` listing what is supported but would still
-        not be enough since often not all trigger type and mode are
-        supported.
-
-    """
-    @property
-    @abc.abstractmethod
-    def trigger_mode(self) -> TriggerMode:
-        raise NotImplementedError()
-
-    @property
-    @abc.abstractmethod
-    def trigger_type(self) -> TriggerType:
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def set_trigger(self, ttype: TriggerType, tmode: TriggerMode) -> None:
-        """Set device for a specific trigger.
-        """
         pass
 
 
