@@ -4,6 +4,10 @@ python-microscope releases.
 Version 0.6.0 (upcoming)
 ------------------------
 
+* New devices supported:
+
+  * Prior ProScan III controller XY stages.
+
 * New `TestStage` and `TestStageAxis` classes.
 
 
