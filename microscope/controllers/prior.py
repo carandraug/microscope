@@ -186,16 +186,24 @@ class _ProScanIIIConnection:
 
 
     def go_relative(self, x: int, y: int, z: int = 0) -> None:
-        self.move_command(b'GR %d %d %d' % (x, y, z))
+        # 10 seconds should be enough to move anywhere.
+        with self.changed_timeout(10):
+            self.move_command(b'GR %d %d %d' % (x, y, z))
 
     def go(self, xpos: int, ypos: int, zpos: int = 0) -> None:
-        self.move_command(b'G %d %d %d' % (xpos, ypos, zpos))
+        # 10 seconds should be enough to move anywhere.
+        with self.changed_timeout(10):
+            self.move_command(b'G %d %d %d' % (xpos, ypos, zpos))
 
     def go_x(self, pos: int) -> None:
-        self.move_command(b'GX %d' % pos)
+        # 10 seconds should be enough to move anywhere.
+        with self.changed_timeout(10):
+            self.move_command(b'GX %d' % pos)
 
     def go_y(self, pos: int) -> None:
-        self.move_command(b'GY %d' % pos)
+        # 10 seconds should be enough to move anywhere.
+        with self.changed_timeout(10):
+            self.move_command(b'GY %d' % pos)
 
 
     def absolute_position(self) -> typing.Tuple[int, int, int]:
@@ -358,6 +366,11 @@ class _ProScanIIIStage(microscope.devices.StageDevice):
             'x' : _ProScanIIIStageAxis(self._conn, 'X'),
             'y' : _ProScanIIIStageAxis(self._conn, 'Y'),
         }
+
+    def _on_enable(self) -> bool:
+        for axis in self._axes.values():
+            axis._do_enable()
+        return True
 
     @property
     def axes(self) -> typing.Mapping[str, microscope.devices.StageAxis]:
