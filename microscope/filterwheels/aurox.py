@@ -1,20 +1,21 @@
-#!/usr/bin/python
-# -*- coding: utf-8
-#
-# Copyright 2019 Mick Phillips (mick.phillips@gmail.com)
-#
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#!/usr/bin/env python3
+
+## Copyright (C) 2020 Mick Phillips <mick.phillips@gmail.com>
+##
+## This file is part of Microscope.
+##
+## Microscope is free software: you can redistribute it and/or modify
+## it under the terms of the GNU General Public License as published by
+## the Free Software Foundation, either version 3 of the License, or
+## (at your option) any later version.
+##
+## Microscope is distributed in the hope that it will be useful,
+## but WITHOUT ANY WARRANTY; without even the implied warranty of
+## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+## GNU General Public License for more details.
+##
+## You should have received a copy of the GNU General Public License
+## along with Microscope.  If not, see <http://www.gnu.org/licenses/>.
 
 """Adds support for Aurox devices
 
@@ -35,13 +36,15 @@ Deconvolving data requires:
 """
 
 import logging
+import time
 from enum import IntEnum
+from threading import Lock
 from typing import Mapping
 
 import hid
 
-import microscope.devices
-
+import microscope
+import microscope.abc
 
 _logger = logging.getLogger(__name__)
 
@@ -56,7 +59,6 @@ except Exception:
 
 
 Mode = IntEnum("Mode", "difference, raw, calibrate")
-
 
 # Clarity constants. These may differ across products, so mangle names.
 # USB IDs
@@ -146,11 +148,8 @@ class _CameraAugmentor:
         return shape
 
 
-class Clarity(
-    microscope.devices.ControllerDevice, microscope.devices.FilterWheelBase
-):
+class Clarity(microscope.abc.Controller, microscope.abc.FilterWheel):
     """Adds support for Aurox Clarity
-
     Acts as a ControllerDevice providing the camera attached to the Clarity."""
 
     _slide_to_sectioning = {
@@ -177,9 +176,8 @@ class Clarity(
            :param camera_kwargs: parameters passed to camera as keyword arguments
         """
         super().__init__(**kwargs)
-        from threading import Lock
-
         # A comms lock.
+        super().__init__(positions=Clarity._positions, **kwargs)
         self._lock = Lock()
         # The hid connection object
         self._hid = None
@@ -211,7 +209,7 @@ class Clarity(
         )
 
     @property
-    def devices(self) -> Mapping[str, microscope.devices.Device]:
+    def devices(self) -> Mapping[str, microscope.abc.Device]:
         """Devices property, required by ControllerDevice interface."""
         if self._cam:
             return {"camera": self._cam}
@@ -247,7 +245,7 @@ class Clarity(
                 err = self._hid.error()
                 if err != "":
                     self.close()
-                    raise Exception(err)
+                    raise microscope.DeviceError(err)
                 else:
                     return None
             while True:
@@ -303,14 +301,14 @@ class Clarity(
         """Get the current slide position"""
         result = self._send_command(__GETSLIDE)
         if result is None:
-            raise Exception("Slide position error.")
+            raise microscope.DeviceError("Slide position error.")
         return result
 
     def set_slide_position(self, position, blocking=True):
         """Set the slide position"""
         result = self._send_command(__SETSLIDE, position)
         if result is None:
-            raise Exception("Slide position error.")
+            raise microscope.DeviceError("Slide position error.")
         while blocking and self.moving():
             pass
         return result
@@ -370,7 +368,7 @@ class Clarity(
             status["filter"] = (None, "moving")
             busy.append(True)
         else:
-            status["filter"] = (result[6], self._filters.get(result[6], None))
+            status["filter"] = result[6]
         # Calibration LED on
         status["calibration"] = result[7] == __CALON
         # Slide or filter moving
@@ -379,8 +377,6 @@ class Clarity(
 
     def moving(self):
         """Report whether or not the device is between positions."""
-        import time
-
         # Wait a short time to avoid false negatives when called
         # immediately after initiating a move. Trial and error
         # indicates a delay of 50ms is required.
@@ -397,18 +393,18 @@ class Clarity(
             time.sleep(0.01)
         return moving
 
-    def get_position(self):
+    def _do_get_position(self):
         """Return the current filter position"""
         result = self._send_command(__GETFILT)
         if result == __FLTERR:
-            raise Exception("Filter position error.")
+            raise microscope.DeviceError("Filter position error.")
         return result
 
-    def set_position(self, pos, blocking=True):
+    def _do_set_position(self, pos, blocking=True):
         """Set the filter position"""
         result = self._send_command(__SETFILT, pos)
         if result is None:
-            raise Exception("Filter position error.")
+            raise microscope.DeviceError("Filter position error.")
         while blocking and self.moving():
             pass
         return result
