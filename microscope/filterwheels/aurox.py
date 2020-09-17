@@ -119,7 +119,7 @@ class _CameraAugmentor:
         elif self._aurox_mode == Mode.calibrate:
             # This will introduce a significant delay, but returning the
             # image indicates that the calibration step is complete.
-            self._processor = clarity_process.ClarityProcessor(data)
+            self._processor = ClarityProcessor(data)
             return data
         else:
             raise Exception("Unrecognised mode: %s", self._aurox_mode)
