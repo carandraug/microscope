@@ -338,9 +338,12 @@ class XimeaCamera(microscope.abc.TriggerTargetMixin, microscope.abc.Camera):
         return True
 
     def set_exposure_time(self, value: float) -> None:
-        # exposure times are set in us.
+        # `value` is seconds, but ximea expects microseconds.
+        min_usec = self._handle.get_exposure_minimum()
+        max_usec = self._handle.get_exposure_maximum()
+        usec = max(min(value * (10 ** 6), max_usec), min_usec)
         try:
-            self._handle.set_exposure_direct(int(value * 1000000))
+            self._handle.set_exposure_direct(usec)
         except Exception as err:
             _logger.debug("set_exposure_time exception: %s", err)
 
