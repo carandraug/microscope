@@ -1,206 +1,148 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python3
 
-# Copyright (C) 2020 David Miguel Susano Pinto <david.pinto@bioch.ox.ac.uk>
-# Copyright (C) 2020 Ian Dobbue <ian.dobiie@bioch.ox.ac.uk>
-#
-# Microscope is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# Microscope is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with Microscope.  If not, see <http://www.gnu.org/licenses/>.
+## Copyright (C) 2020 David Miguel Susano Pinto <carandraug@gmail.com>
+## Copyright (C) 2020 Ian Dobbie <ian.dobbie@bioch.ox.ac.uk>
+##
+## This file is part of Microscope.
+##
+## Microscope is free software: you can redistribute it and/or modify
+## it under the terms of the GNU General Public License as published by
+## the Free Software Foundation, either version 3 of the License, or
+## (at your option) any later version.
+##
+## Microscope is distributed in the hope that it will be useful,
+## but WITHOUT ANY WARRANTY; without even the implied warranty of
+## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+## GNU General Public License for more details.
+##
+## You should have received a copy of the GNU General Public License
+## along with Microscope.  If not, see <http://www.gnu.org/licenses/>.
 
-"""Test controller device that merges a test stage with a test camera 
-in mosaic mode.
-
-This mosaic type functionality to be tested as the camera returns 
-different data dependant upon the stage position. 
+"""Simulation of a full system based on a given image file.
 """
 
 import logging
-import typing
 import time
+import typing
+
 import numpy as np
-from PIL import Image
+import PIL
 import scipy.ndimage
 
-import microscope.devices as devices
-import microscope.testsuite.devices
+import microscope
+import microscope.abc
+from microscope.testsuite.devices import TestCamera, TestFilterWheel, TestStage
+
 
 _logger = logging.getLogger(__name__)
 
 
-class StageAwareCamera(microscope.testsuite.devices.TestCamera):
-    def __init__(self, stage: devices.StageDevice, image, **kwargs) -> None:
+class StageAwareCamera(TestCamera):
+    """Simulated camera that returns subregions of image based on stage
+    position.
+
+    Instead of using this class directly, consider using the
+    :func:`simulated_system_from_image` function which will generate
+    all the required simulated devices for a given image file.
+
+    Args:
+        image: the image from which regions will be cropped based on
+            the stage and filter wheel positions.
+        stage: stage to read coordinates from.  Must have an "x",
+            "y", and "z" axis.
+        filterwheel: filter wheel to read position.
+
+    """
+
+    def __init__(
+        self,
+        image: np.ndarray,
+        stage: microscope.abc.Stage,
+        filterwheel: microscope.abc.FilterWheel,
+        **kwargs,
+    ) -> None:
         super().__init__(**kwargs)
+        self._image = image
         self._stage = stage
-        self.mosaicimage = image
-        # add mosaic image pattern function.
-        methods = list(self._image_generator._methods)
-        methods.append(self.mosaic)
-        self._image_generator._methods = tuple(methods)
-        # and select it.
-        self.update_settings(
-            {"image pattern": len(self._image_generator._methods) - 1}
-        )
-        # load image so we can find size and channels.
-        # add settings for mosaic im`ge pattern.
+        self._filterwheel = filterwheel
+        self._pixel_size = 1.0  # TODO: make this configurable, maybe?
 
-        self.mosaic_xpos = 0
-        self.mosaic_ypos = 0
-        self.mosaic_zpos = 0.0
-        self.mosaic_channel = 0
-        self._pixelsize = 1
-        self.add_setting(
-            "pixelsize",
-            "float",
-            lambda: self._pixelsize,
-            self._set_pixelsize,
-            lambda: (0, 100),
-        )
-        self.add_setting(
-            "mosaic image X pos",
-            "int",
-            lambda: self.mosaic_xpos,
-            self.set_mosaic_xpos,
-            lambda: (0, self.mosaicimage.size[0]),
-        )
-        self.add_setting(
-            "mosaic image Y pos",
-            "int",
-            lambda: self.mosaic_ypos,
-            self.set_mosaic_ypos,
-            lambda: (0, self.mosaicimage.size[0]),
-        )
-        self.add_setting(
-            "mosaic image Z pos",
-            "float",
-            lambda: self.mosaic_zpos,
-            self.set_mosaic_zpos,
-            lambda: (-50, 50),
-        )
-        self.add_setting(
-            "mosaic channel",
-            "int",
-            lambda: self.mosaic_channel,
-            self.set_mosaic_channel,
-            lambda: (0, 3),
-        )
-
-    # need a pixel size as the image must be mapped the stage coords.
-    def _set_pixelsize(self, value):
-        self._pixelsize = value
-
-    def _fetch_data(self):
-        if self._acquiring and self._triggered > 0:
-            _logger.info("Sending image")
-            time.sleep(self._exposure_time)
-            self._triggered -= 1
-            # Create an image
-            current_pos = self._stage.position
-            x = int(current_pos["x"] / self._pixelsize)
-            y = int(current_pos["y"] / self._pixelsize)
-            z = current_pos["z"]
-            self.update_settings({"mosaic image X pos": x})
-            self.update_settings({"mosaic image Y pos": y})
-            self.update_settings({"mosaic image Z pos": z})
-
-            dark = 0
-            light = 255
-            width = self._roi.width // self._binning.h
-            height = self._roi.height // self._binning.v
-            image = self._image_generator.get_image(
-                width, height, dark, light, index=self._sent
+        if not all([name in stage.axes.keys() for name in ["x", "y", "z"]]):
+            raise microscope.InitialiseError(
+                "stage for StageAwareCamera requires x, y, and z axis"
             )
-            self._sent += 1
-            return image
+        if image.shape[2] != self._filterwheel.n_positions:
+            raise ValueError(
+                "image has %d channels but filterwheel has %d positions"
+            )
 
-    # mosaic getters and setters.
-    def set_mosaic_xpos(self, pos):
-        self.mosaic_xpos = pos
+        # Empty the settings dict, most of them are for testing
+        # settings, and the rest is specific to the image generator
+        # which we don't need.  We probably should have a simpler
+        # TestCamera that we could subclass.
+        self._settings = {}
 
-    def get_mosaic_xpos(self):
-        return self.mosaic_xpos
+    def _fetch_data(self) -> typing.Optional[np.ndarray]:
+        if not self._acquiring or self._triggered == 0:
+            return
 
-    def set_mosaic_ypos(self, pos):
-        self.mosaic_ypos = pos
+        time.sleep(self._exposure_time)
+        self._triggered -= 1
+        _logger.info("Creating image")
 
-    def get_mosaic_ypos(self):
-        return self.mosaic_ypos
+        # Use stage position to compute bounding box.
+        width = self._roi.width // self._binning.h
+        height = self._roi.height // self._binning.v
+        x = int((self._stage.position["x"] / self._pixel_size) - (width / 2))
+        y = int((self._stage.position["y"] / self._pixel_size) - (height / 2))
 
-    def set_mosaic_zpos(self, pos):
-        self.mosaic_zpos = pos
+        # Use filter wheel position to select the image channel.
+        channel = self._filterwheel.position
 
-    def get_mosaic_zpos(self):
-        return self.mosaic_zpos
+        subsection = self._image[y : y + height, x : x + width, channel]
 
-    def set_mosaic_channel(self, channel):
-        self.mosaic_channel = channel
+        # Gaussian filter on abs Z position to simulate being out of
+        # focus (Z position zero is in focus).
+        blur = abs((self._stage.position["z"]) / 10.0)
+        image = scipy.ndimage.gaussian_filter(subsection, blur)
 
-    def get_mosaic_channel(self):
-        return self.mosaic_channel
-
-    # deal with actual mosaic image return.
-    def mosaic(self, w, h, dark, light):
-        """Returns subsections of a mosaic image based on input coords"""
-        if not self.mosaicimage:
-            self.loadimage("microscope/testsuite/mosaicimage.tif")
-        #            self.redmosaic,self.greenmosaic,self.bluemosaic=self.mosaicimage.split()
-        x = self.mosaic_xpos + (self.mosaicimage.size[0] / 2)
-        y = self.mosaic_ypos + (self.mosaicimage.size[1] / 2)
-        blur = abs((self.mosaic_zpos) / 10)
-        # return a section of the image
-        # take moasic channel mod number of channels.
-        imgSection = self.mosaicimage.getchannel(
-            self.mosaic_channel % len(self.mosaicimage.getbands())
-        ).crop((x - w / 2, y - h / 2, x + w / 2, y + h / 2))
-        # gaussian filter on abs Z position to simulate focus
-        return scipy.ndimage.gaussian_filter(
-            np.asarray(imgSection.getdata()).reshape(w, h), blur
-        )
-
-    def loadimage(self, imagefile):
-        self.moasaicimage = Image.open(imagefile)
+        self._sent += 1
+        return np.fliplr(np.flipud(image))
 
 
-# The controller is not necessary at all, a user could perfectly
-# create its own camera and stage, it's only to make device server
-# easier to use.
-class CameraStageController(devices.ControllerDevice):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+def simulated_system_from_image(
+    filepath: str, **kwargs
+) -> typing.Dict[str, microscope.abc.Device]:
+    """Create simulated devices given an image file.
 
-        # load image and set moasic size for stage.
-        self.mosaicimage = Image.open("microscope/testsuite/mosaicimage.tif")
-        mosaicSize = self.mosaicimage.size[:2]
-        # initialise stage
-        stage = microscope.testsuite.devices.TestStage(
-            {
-                "x": devices.AxisLimits(-mosaicSize[0] / 2, mosaicSize[0] / 2),
-                "y": devices.AxisLimits(-mosaicSize[1] / 2, mosaicSize[1] / 2),
-                "z": devices.AxisLimits(-50, 50),
-            }
-        )
-        self._stage = stage
+    To use with the `device-server`::
 
-        # init camera and configure.
-        camera = StageAwareCamera(stage, self.mosaicimage)
-        camera.update_settings({"pixelsize": 1.0})
+        DEVICES = [
+            device(simulated_system_from_image, 'localhost', 8000,
+                   conf={'filepath': path_to_image_file}),
+        ]
+    """
+    image = np.array(PIL.Image.open(filepath))
+    if len(image.shape) < 3:
+        raise ValueError("not an RGB image")
 
-        # filterwheel = microscope.testsuite.devices.TestFilterWheel()
-        # self._filterwheel = filterwheel
-        # list devices
-        self._devices = {"stage": stage, "camera": camera}
+    stage = TestStage(
+        {
+            "x": microscope.AxisLimits(0, image.shape[0]),
+            "y": microscope.AxisLimits(0, image.shape[1]),
+            "z": microscope.AxisLimits(-50, 50),
+        }
+    )
+    stage.initialize()
 
-    #                         'filterwheel': filterwheel}
+    filterwheel = TestFilterWheel(positions=image.shape[2])
+    filterwheel.initialize()
 
-    @property
-    def devices(self):
-        return self._devices
+    camera = StageAwareCamera(image, stage, filterwheel)
+    camera.initialize()
+
+    return {
+        "camera": camera,
+        "filterwheel": filterwheel,
+        "stage": stage,
+    }
