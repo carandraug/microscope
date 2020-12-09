@@ -24,9 +24,9 @@ not aim to be pretty; it aims to be simple, complete, and work on any
 OS and Python without extra work.  It is not meant as the basis for a
 full-fledged microscope GUI.
 
-This module requires PySide2 which is an requirement for the
-microscope "GUI" extra, i.e., only installed by `pip` if microscope is
-installed with ``pip install microscope[GUI]``.
+This module requires qtpy which is a requirement for the microscope
+"GUI" extra, i.e., only installed by `pip` if microscope is installed
+with ``pip install microscope[GUI]``.
 
 """
 
@@ -42,6 +42,7 @@ import Pyro4
 from qtpy import QtCore, QtGui, QtWidgets
 
 import microscope.abc
+
 
 _logger = logging.getLogger(__name__)
 
@@ -107,10 +108,7 @@ class _Imager(QtCore.QObject):
         self.destroyed.connect(lambda: self._camera.set_client(None))
 
     def snap(self) -> None:
-        # CameraDevice have a soft_trigger method but it may do
-        # nothing.  If the camera is a TriggerTargetMixin, then it
-        # will have a trigger method that does work.
-        getattr(self._camera, "trigger", self._camera.soft_trigger)()
+        self._camera.trigger()
 
     def fetchLoop(self) -> None:
         while True:
@@ -344,7 +342,7 @@ class MainWindow(QtWidgets.QMainWindow):
             shortcut.activated.connect(slot)
 
 
-def main(argv=sys.argv) -> int:
+def main(argv: typing.Sequence[str]) -> int:
     app = QtWidgets.QApplication(argv)
     app.setApplicationName("Microscope GUI")
     app.setOrganizationDomain("python-microscope.org")
@@ -382,6 +380,17 @@ def main(argv=sys.argv) -> int:
     window.show()
 
     return app.exec_()
+
+
+def _setuptools_entry_point() -> int:
+    # The setuptools entry point must be a function, we can't simply
+    # name this module even if this module does work as a script.  We
+    # also do not want to set the default of main() to sys.argv
+    # because when the documentation is generated (with Sphinx's
+    # autodoc extension), then sys.argv gets replaced with the
+    # sys.argv value at the time docs were generated (see
+    # https://stackoverflow.com/a/12087750 )
+    return main(sys.argv)
 
 
 if __name__ == "__main__":

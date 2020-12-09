@@ -4,6 +4,7 @@ requires = ['setuptools']
 
 [tool.isort]
 line_length = 80
+lines_after_imports = 2
 # compatibility with black style (multi lineoutput 3 is vert-hanging)
 multi_line_output = 3
 # compatibility with black style
@@ -15,7 +16,8 @@ line-length = 80
 target-version = ['py36', 'py37', 'py38']
 
 
-[tool.pylint]
+[tool.pylint.FORMAT]
+max-line-length = 80
 
 
 [tool.pytest.ini_options]

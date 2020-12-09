@@ -18,11 +18,7 @@
 ## You should have received a copy of the GNU General Public License
 ## along with Microscope.  If not, see <http://www.gnu.org/licenses/>.
 
-"""Classes for control of microscope components.
-
-This module provides base classes for experiment control and data
-acquisition devices that can be served over Pyro. This means that each
-device may be served from a separate process, or even from a different PC.
+"""Abstract Base Classes for the different device types.
 """
 
 import abc
@@ -34,7 +30,6 @@ import threading
 import time
 import typing
 from ast import literal_eval
-from collections import OrderedDict
 from enum import EnumMeta
 from threading import Thread
 
@@ -42,6 +37,7 @@ import numpy
 import Pyro4
 
 import microscope
+
 
 _logger = logging.getLogger(__name__)
 
@@ -178,6 +174,66 @@ class FloatingDeviceMixin(metaclass=abc.ABCMeta):
         pass
 
 
+class TriggerTargetMixin(metaclass=abc.ABCMeta):
+    """Mixin for a device that may be the target of a hardware trigger.
+
+    TODO: need some way to retrieve the supported trigger types and
+        modes.  This is not just two lists, one for types and another
+        for modes, because some modes can only be used with certain
+        types and vice-versa.
+
+    """
+
+    @property
+    @abc.abstractmethod
+    def trigger_mode(self) -> microscope.TriggerMode:
+        raise NotImplementedError()
+
+    @property
+    @abc.abstractmethod
+    def trigger_type(self) -> microscope.TriggerType:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def set_trigger(
+        self, ttype: microscope.TriggerType, tmode: microscope.TriggerMode
+    ) -> None:
+        """Set device for a specific trigger.
+        """
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def _do_trigger(self) -> None:
+        """Actual trigger of the device.
+
+        Classes implementing this interface should implement this
+        method instead of `trigger`.
+
+        """
+        raise NotImplementedError()
+
+    def trigger(self) -> None:
+        """Trigger device.
+
+        The actual effect is device type dependent.  For example, on a
+        `Camera` it triggers image acquisition while on a
+        `DeformableMirror` it applies a queued pattern.  See
+        documentation for the devices implementing this interface for
+        details.
+
+        Raises:
+            microscope.IncompatibleStateError: if trigger type is not
+                set to `TriggerType.SOFTWARE`.
+
+        """
+        if self.trigger_type is not microscope.TriggerType.SOFTWARE:
+            raise microscope.IncompatibleStateError(
+                "trigger type is not software"
+            )
+        _logger.debug("trigger by software")
+        self._do_trigger()
+
+
 class Device(metaclass=abc.ABCMeta):
     """A base device class. All devices should subclass this class.
 
@@ -188,8 +244,7 @@ class Device(metaclass=abc.ABCMeta):
 
     def __init__(self, index=None):
         self.enabled = None
-        # A list of settings. (Can't serialize OrderedDict, so use {}.)
-        self._settings = OrderedDict()
+        self._settings: typing.Dict[str, _Setting] = {}
         self._index = index
 
     def __del__(self):
@@ -198,7 +253,7 @@ class Device(metaclass=abc.ABCMeta):
     def get_is_enabled(self):
         return self.enabled
 
-    def _on_disable(self):
+    def _do_disable(self):
         """Do any device-specific work on disable.
 
         Subclasses should override this method, rather than modify
@@ -208,10 +263,10 @@ class Device(metaclass=abc.ABCMeta):
 
     def disable(self):
         """Disable the device for a short period for inactivity."""
-        self._on_disable()
+        self._do_disable()
         self.enabled = False
 
-    def _on_enable(self):
+    def _do_enable(self):
         """Do any device-specific work on enable.
 
         Subclasses should override this method, rather than modify
@@ -222,33 +277,74 @@ class Device(metaclass=abc.ABCMeta):
     def enable(self):
         """Enable the device."""
         try:
-            self.enabled = self._on_enable()
+            self.enabled = self._do_enable()
         except Exception as err:
-            _logger.debug("Error in _on_enable:", exc_info=err)
+            _logger.debug("Error in _do_enable:", exc_info=err)
 
     @abc.abstractmethod
-    def _on_shutdown(self):
-        """Subclasses over-ride this with tasks to do on shutdown."""
-        pass
+    def _do_shutdown(self) -> None:
+        """Private method - actual shutdown of the device.
+
+        Users should be calling :meth:`shutdown` and not this method.
+        Concrete implementations should implement this method instead
+        of `shutdown`.
+        """
+        raise NotImplementedError()
 
     @abc.abstractmethod
     def initialize(self):
         """Initialize the device."""
         pass
 
-    def shutdown(self):
-        """Shutdown the device for a prolonged period of inactivity."""
+    def shutdown(self) -> None:
+        """Shutdown the device.
+
+        Disable and disconnect the device.  This method should be
+        called before destructing the device object, to ensure that
+        the device is actually shutdown.
+
+        After `shutdown`, the device object is no longer usable and
+        calling any other method is undefined behaviour.  The only
+        exception `shutdown` itself which can be called consecutively,
+        and after the first time will have no effect.
+
+        A device object that has been shutdown can't be reinitialised.
+        Instead of reusing the object, a new one should be created
+        instead.  This means that `shutdown` will leave the device in
+        a state that it can be reconnected.
+
+        .. code-block:: python
+
+            device = SomeDevice()
+            device.shutdown()
+
+            # Multiple calls to shutdown are OK
+            device.shutdown()
+            device.shutdown()
+
+            # After shutdown, everything else is undefined behaviour.
+            device.enable()  # undefined behaviour
+            device.get_setting("speed")  # undefined behaviour
+
+            # To reinitialise the device, construct a new instance.
+            device = SomeDevice()
+
+
+        .. note::
+
+            While `__del__` calls `shutdown`, one should not rely on
+            it.  Python does not guarante that `__del__` will be
+            called when the interpreter exits so if `shutdown` is not
+            called explicitely, the devices might not be shutdown.
+
+        """
         try:
             self.disable()
         except Exception as e:
             _logger.warning("Exception in disable() during shutdown: %s", e)
         _logger.info("Shutting down ... ... ...")
-        self._on_shutdown()
+        self._do_shutdown()
         _logger.info("... ... ... ... shut down completed.")
-
-    def make_safe(self):
-        """Put the device into a safe state."""
-        pass
 
     def add_setting(
         self, name, dtype, get_func, set_func, values, readonly=False
@@ -266,7 +362,7 @@ class Device(metaclass=abc.ABCMeta):
         A client needs some way of knowing a setting name and data type,
         retrieving the current value and, if settable, a way to retrieve
         allowable values, and set the value.
-        We store this info in an OrderedDict. I considered having a Setting
+        We store this info in a dictionary. I considered having a Setting
         class with getter, setter, etc., and adding Setting instances as
         device attributes, but Pyro does not support dot notation to access
         the functions we need (e.g. Device.some_setting.set ), so I'd have to
@@ -368,7 +464,7 @@ def keep_acquiring(func):
         if self._acquiring:
             self.abort()
             result = func(self, *args, **kwargs)
-            self._on_enable()
+            self._do_enable()
         else:
             result = func(self, *args, **kwargs)
         return result
@@ -430,14 +526,14 @@ class DataDevice(Device, metaclass=abc.ABCMeta):
         """Enable the data capture device.
 
         Ensures that a data handling threads are running.
-        Implement device-specific code in _on_enable .
+        Implement device-specific code in _do_enable .
         """
         _logger.debug("Enabling ...")
         # Call device-specific code.
         try:
-            result = self._on_enable()
+            result = self._do_enable()
         except Exception as err:
-            _logger.debug("Error in _on_enable:", exc_info=err)
+            _logger.debug("Error in _do_enable:", exc_info=err)
             self.enabled = False
             raise err
         if not result:
@@ -466,7 +562,7 @@ class DataDevice(Device, metaclass=abc.ABCMeta):
     def disable(self):
         """Disable the data capture device.
 
-        Implement device-specific code in _on_disable ."""
+        Implement device-specific code in _do_disable ."""
         self.enabled = False
         if self._fetch_thread:
             if self._fetch_thread.is_alive():
@@ -614,8 +710,8 @@ class DataDevice(Device, metaclass=abc.ABCMeta):
     def grab_next_data(self, soft_trigger=True):
         """Returns results from next trigger via a direct call.
 
-        :param soft_trigger: calls soft_trigger if True,
-                               waits for hardware trigger if False.
+        :param soft_trigger: calls trigger() if True, waits for
+                               hardware trigger if False.
         """
         if not self.enabled:
             raise microscope.DisabledDeviceError("Camera not enabled.")
@@ -624,7 +720,7 @@ class DataDevice(Device, metaclass=abc.ABCMeta):
         self.set_client(self)
         # Wait for data from next trigger.
         if soft_trigger:
-            self.soft_trigger()
+            self.trigger()
         self._new_data_condition.wait()
         # Pop self from client stack
         self.set_client(None)
@@ -639,7 +735,7 @@ class DataDevice(Device, metaclass=abc.ABCMeta):
             self._new_data_condition.notify()
 
 
-class Camera(DataDevice):
+class Camera(TriggerTargetMixin, DataDevice):
     """Adds functionality to DataDevice to support cameras.
 
     Defines the interface for cameras.
@@ -675,9 +771,6 @@ class Camera(DataDevice):
             lambda: self._readout_mode,
             self.set_readout_mode,
             lambda: self._readout_modes,
-        )
-        self.add_setting(
-            "binning", "tuple", self.get_binning, self.set_binning, None
         )
         self.add_setting("roi", "tuple", self.get_roi, self.set_roi, None)
 
@@ -738,10 +831,6 @@ class Camera(DataDevice):
 
     def get_cycle_time(self):
         """Return the cycle time, in seconds."""
-        pass
-
-    def get_sensor_temperature(self):
-        """Return the sensor temperature."""
         pass
 
     @abc.abstractmethod
@@ -837,80 +926,19 @@ class Camera(DataDevice):
         """Return metadata."""
         pass
 
-    def soft_trigger(self):
-        """Optional software trigger - implement if available."""
-        pass
-
-
-class TriggerTargetMixin(metaclass=abc.ABCMeta):
-    """Mixin for a device that may be the target of a hardware trigger.
-
-    TODO: need some way to retrieve the supported trigger types and
-        modes.  This is not just two lists, one for types and another
-        for modes, because some modes can only be used with certain
-        types and vice-versa.
-
-    """
-
-    @property
-    @abc.abstractmethod
-    def trigger_mode(self) -> microscope.TriggerMode:
-        raise NotImplementedError()
-
-    @property
-    @abc.abstractmethod
-    def trigger_type(self) -> microscope.TriggerType:
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def set_trigger(
-        self, ttype: microscope.TriggerType, tmode: microscope.TriggerMode
-    ) -> None:
-        """Set device for a specific trigger.
-        """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def _do_trigger(self) -> None:
-        """Actual trigger of the device.
-
-        Classes implementing this interface should implement this
-        method instead of `trigger`.
-
-        """
-        raise NotImplementedError()
-
-    def trigger(self) -> None:
-        """Trigger device.
-
-        The actual effect is device type dependent.  For example, on a
-        `Camera` it triggers image acquisition while on a
-        `DeformableMirror` it applies a queued pattern.  See
-        documentation for the devices implementing this interface for
-        details.
-
-        Raises:
-            microscope.IncompatibleStateError: if trigger type is not
-                set to `TriggerType.SOFTWARE`.
-
-        """
-        if self.trigger_type is not microscope.TriggerType.SOFTWARE:
-            raise microscope.IncompatibleStateError(
-                "trigger type is not software"
-            )
-        _logger.debug("trigger by software")
-        self._do_trigger()
-
 
 class SerialDeviceMixin(metaclass=abc.ABCMeta):
     """Mixin for devices that are controlled via serial.
+
+    DEPRECATED: turns out that this was a bad idea.  A device that has
+      a serial connection is not a serial connection.  The "has a" and
+      the not "is a" should have told us that we should have been
+      using composition instead of subclassing, but there you go.
 
     Currently handles the flushing and locking of the comms channel
     until a command has finished, and the passthrough to the serial
     channel.
 
-    TODO: add more logic to handle the code duplication of serial
-    devices.
     """
 
     def __init__(self, **kwargs):
@@ -935,11 +963,6 @@ class SerialDeviceMixin(metaclass=abc.ABCMeta):
         if a device requires a specific format.
         """
         return self.connection.write(command + b"\r\n")
-
-    @abc.abstractmethod
-    def is_alive(self):
-        """Query if device is alive and we can send messages."""
-        pass
 
     @staticmethod
     def lock_comms(func):
@@ -1071,9 +1094,6 @@ class DeformableMirror(TriggerTargetMixin, Device, metaclass=abc.ABCMeta):
     def initialize(self) -> None:
         pass
 
-    def _on_shutdown(self) -> None:
-        pass
-
     def _do_trigger(self) -> None:
         """Convenience fallback.
 
@@ -1100,7 +1120,21 @@ class DeformableMirror(TriggerTargetMixin, Device, metaclass=abc.ABCMeta):
         return super().trigger()
 
 
-class Laser(Device, metaclass=abc.ABCMeta):
+class LightSource(TriggerTargetMixin, Device, metaclass=abc.ABCMeta):
+    """Light source such as lasers or LEDs.
+
+    Light sources often, possibly always, only support the
+    `TriggerMode.BULB`.  In this context, the trigger type changes
+    what happens when `enable` is called.  `TriggerType.SOFTWARE`
+    means that `enable` will make the device emit light immediately,
+    and disable will make the device stop emit light.
+
+    `TriggerType.HIGH` or `TriggerType.LOW` means that `enable` will
+    set and unset the laser such that it only emits light while
+    receiving a high or low TTL, or digital, input signal.
+
+    """
+
     @abc.abstractmethod
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -1108,24 +1142,24 @@ class Laser(Device, metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def get_status(self):
-        """Query and return the laser status."""
+        """Query and return the light source status."""
         result = []
         # ...
         return result
 
     @abc.abstractmethod
     def get_is_on(self):
-        """Return True if the laser is currently able to produce light."""
+        """Return True if the light source is currently able to produce light."""
         pass
 
     @abc.abstractmethod
     def _do_get_power(self) -> float:
-        """Internal function that actually returns the laser power."""
+        """Internal function that actually returns the light source power."""
         raise NotImplementedError()
 
     @abc.abstractmethod
     def _do_set_power(self, power: float) -> None:
-        """Internal function that actually sets the laser power.
+        """Internal function that actually sets the light source power.
 
         This function will be called by the `power` attribute setter
         after clipping the argument to the [0, 1] interval.
@@ -1134,12 +1168,12 @@ class Laser(Device, metaclass=abc.ABCMeta):
 
     @property
     def power(self) -> float:
-        """Laser power in the [0, 1] interval."""
+        """Light source power in the [0, 1] interval."""
         return self._do_get_power()
 
     @power.setter
     def power(self, power: float) -> None:
-        """Power laser in the [0, 1] interval.
+        """Light source power in the [0, 1] interval.
 
         The power value will be clipped to [0, 1] interval.
         """
@@ -1153,6 +1187,17 @@ class Laser(Device, metaclass=abc.ABCMeta):
 
 
 class FilterWheel(Device, metaclass=abc.ABCMeta):
+    """ABC for filter wheels, cube turrets, and filter sliders.
+
+    FilterWheel devices are devices that have specific positions to
+    hold different filters.  Implementations will enable the change to
+    any of those positions, including positions that may not hold a
+    filter.
+
+    Args:
+        positions: total number of filter positions on this device.
+    """
+
     def __init__(self, positions: int, **kwargs) -> None:
         super().__init__(**kwargs)
         if positions < 1:
@@ -1201,6 +1246,7 @@ class FilterWheel(Device, metaclass=abc.ABCMeta):
 
     # Deprecated and kept for backwards compatibility.
     def get_num_positions(self) -> int:
+        """Deprecated, use the `n_positions` property."""
         return self.n_positions
 
     def get_position(self) -> int:
@@ -1240,10 +1286,9 @@ class Controller(Device, metaclass=abc.ABCMeta):
         """Map of names to the controlled devices."""
         raise NotImplementedError()
 
-    def _on_shutdown(self) -> None:
+    def _do_shutdown(self) -> None:
         for d in self.devices.values():
             d.shutdown()
-        super()._on_shutdown()
 
 
 class StageAxis(metaclass=abc.ABCMeta):

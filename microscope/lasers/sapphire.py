@@ -24,12 +24,24 @@ import logging
 
 import serial
 
+import microscope._utils
 import microscope.abc
+
 
 _logger = logging.getLogger(__name__)
 
 
-class SapphireLaser(microscope.abc.SerialDeviceMixin, microscope.abc.Laser):
+class SapphireLaser(
+    microscope._utils.OnlyTriggersBulbOnSoftwareMixin,
+    microscope.abc.SerialDeviceMixin,
+    microscope.abc.LightSource,
+):
+    """Coherent Sapphire laser.
+
+    The Sapphire is a diode-pumped solid-state laser and only supports
+    `TriggerMode.SOFTWARE`.
+
+    """
 
     laser_status = {
         b"1": "Start up",
@@ -92,10 +104,6 @@ class SapphireLaser(microscope.abc.SerialDeviceMixin, microscope.abc.Laser):
             line = self._readline()
 
     @microscope.abc.SerialDeviceMixin.lock_comms
-    def is_alive(self):
-        return self.send(b"?l") in b"01"
-
-    @microscope.abc.SerialDeviceMixin.lock_comms
     def get_status(self):
         result = []
 
@@ -125,7 +133,7 @@ class SapphireLaser(microscope.abc.SerialDeviceMixin, microscope.abc.Laser):
         return result
 
     @microscope.abc.SerialDeviceMixin.lock_comms
-    def _on_shutdown(self):
+    def _do_shutdown(self) -> None:
         # Disable laser.
         self._write(b"l=0")
         self.flush_buffer()
@@ -137,7 +145,7 @@ class SapphireLaser(microscope.abc.SerialDeviceMixin, microscope.abc.Laser):
 
     # Turn the laser ON. Return True if we succeeded, False otherwise.
     @microscope.abc.SerialDeviceMixin.lock_comms
-    def _on_enable(self):
+    def _do_enable(self):
         _logger.info("Turning laser ON.")
         # Turn on emission.
         response = self.send(b"l=1")

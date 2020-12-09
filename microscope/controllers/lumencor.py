@@ -35,6 +35,7 @@ import typing
 import serial
 
 import microscope
+import microscope._utils
 import microscope.abc
 
 
@@ -212,12 +213,13 @@ class SpectraIIILightEngine(microscope.abc.Controller):
         return self._lights
 
 
-class _SpectraIIILightChannel(microscope.abc.Laser):
+class _SpectraIIILightChannel(
+    microscope._utils.OnlyTriggersBulbOnSoftwareMixin,
+    microscope.abc.LightSource,
+):
     """A single light channel from a light engine.
 
-    A channel is not necessarily a lasers although it subclasses from
-    `LaserDevice`.  Constituent light sources may include LEDs,
-    luminescent light pipes, or lasers.
+    A channel may be an LED, luminescent light pipe, or a laser.
     """
 
     def __init__(self, connection: _SpectraIIIConnection, index: int) -> None:
@@ -232,9 +234,9 @@ class _SpectraIIILightChannel(microscope.abc.Laser):
     def initialize(self) -> None:
         pass
 
-    def _on_shutdown(self) -> None:
+    def _do_shutdown(self) -> None:
         # There is a shutdown command but this actually powers off the
-        # device which is not what LaserDevice.shutdown() is meant to
+        # device which is not what LightSource.shutdown() is meant to
         # do.  So do nothing.
         pass
 

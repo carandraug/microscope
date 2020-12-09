@@ -62,6 +62,7 @@ from numpy.ctypeslib import ndpointer
 import microscope
 import microscope.abc
 
+
 _logger = logging.getLogger(__name__)
 
 
@@ -1327,8 +1328,28 @@ class ReadoutMode:
 _dll_lock = Lock()
 
 
-class AndorAtmcd(microscope.abc.FloatingDeviceMixin, microscope.abc.Camera):
-    """ Implements CameraDevice interface for Andor ATMCD library."""
+ATMCD_MODE_TO_TRIGGER = {
+    TriggerMode.EXTERNAL: (
+        microscope.TriggerType.RISING_EDGE,
+        microscope.TriggerMode.ONCE,
+    ),
+    TriggerMode.BULB: (
+        microscope.TriggerType.RISING_EDGE,
+        microscope.TriggerMode.BULB,
+    ),
+    TriggerMode.SOFTWARE: (
+        microscope.TriggerType.SOFTWARE,
+        microscope.TriggerMode.ONCE,
+    ),
+}
+
+TRIGGER_TO_ATMCD_MODE = {v: k for k, v in ATMCD_MODE_TO_TRIGGER.items()}
+
+
+class AndorAtmcd(
+    microscope.abc.FloatingDeviceMixin, microscope.abc.Camera,
+):
+    """Implements CameraDevice interface for Andor ATMCD library."""
 
     def __init__(self, index=0, **kwargs):
         super().__init__(index=index, **kwargs)
@@ -1498,7 +1519,7 @@ class AndorAtmcd(microscope.abc.FloatingDeviceMixin, microscope.abc.Camera):
         # Fan control
         name = "Temperature"
         self.add_setting(
-            name, "int", self.get_sensor_temperature, None, (None, None), True
+            name, "int", self._get_sensor_temperature, None, (None, None), True
         )
         name = "Fan mode"
         self.add_setting(
@@ -1581,7 +1602,7 @@ class AndorAtmcd(microscope.abc.FloatingDeviceMixin, microscope.abc.Camera):
         with self:
             return GetCameraSerialNumber()
 
-    def _on_shutdown(self):
+    def _do_shutdown(self) -> None:
         """Warm up the sensor then shut down the camera.
 
         This may take some time, so we should ensure that the _dll_lock is
@@ -1608,11 +1629,11 @@ class AndorAtmcd(microscope.abc.FloatingDeviceMixin, microscope.abc.Camera):
         with self:
             ShutDown()
 
-    def _on_disable(self):
+    def _do_disable(self):
         """Call abort to stop acquisition."""
         self.abort()
 
-    def _on_enable(self):
+    def _do_enable(self):
         """Enter data acquisition state."""
         if self._acquiring:
             self.abort()
@@ -1701,13 +1722,16 @@ class AndorAtmcd(microscope.abc.FloatingDeviceMixin, microscope.abc.Camera):
         with self:
             return GetDetector()
 
-    def get_sensor_temperature(self):
+    def _get_sensor_temperature(self):
         """Return the sensor temperature."""
         with self:
             return GetTemperature()[1]
 
     def get_trigger_type(self):
-        """Return the microscope.devices trigger type."""
+        """Return the microscope.devices trigger type.
+
+        deprecated, use trigger_mode and trigger_type properties.
+        """
         trig = self.get_setting("TriggerMode")
         if trig == TriggerMode.BULB:
             return microscope.abc.TRIGGER_DURATION
@@ -1717,7 +1741,33 @@ class AndorAtmcd(microscope.abc.FloatingDeviceMixin, microscope.abc.Camera):
             return microscope.abc.TRIGGER_BEFORE
 
     def soft_trigger(self):
-        """Send a software trigger signal."""
+        """Send a software trigger signal.
+
+        Deprecated, use trigger().
+        """
+        with self:
+            SendSoftwareTrigger()
+
+    @property
+    def trigger_mode(self) -> microscope.TriggerMode:
+        return ATMCD_MODE_TO_TRIGGER[self.get_setting("TriggerMode")][1]
+
+    @property
+    def trigger_type(self) -> microscope.TriggerType:
+        return ATMCD_MODE_TO_TRIGGER[self.get_setting("TriggerMode")][0]
+
+    def set_trigger(
+        self, ttype: microscope.TriggerType, tmode: microscope.TriggerMode
+    ) -> None:
+        try:
+            atmcd_mode = TRIGGER_TO_ATMCD_MODE[(ttype, tmode)]
+        except KeyError:
+            raise microscope.UnsupportedFeatureError(
+                "no ATMCD mode for %s and %s" % (ttype, tmode)
+            )
+        self.set_setting("TriggerMode", atmcd_mode)
+
+    def _do_trigger(self) -> None:
         with self:
             SendSoftwareTrigger()
 

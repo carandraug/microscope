@@ -25,7 +25,9 @@ import typing
 import serial
 
 import microscope
+import microscope._utils
 import microscope.abc
+
 
 _logger = logging.getLogger(__name__)
 
@@ -226,7 +228,10 @@ class _iBeamConnection:
         return float(key[:-3])
 
 
-class TopticaiBeam(microscope.abc.Laser):
+class TopticaiBeam(
+    microscope._utils.OnlyTriggersBulbOnSoftwareMixin,
+    microscope.abc.LightSource,
+):
     """Toptica iBeam smart laser.
 
     Control of laser power is performed by setting the power level on
@@ -253,7 +258,7 @@ class TopticaiBeam(microscope.abc.Laser):
     def initialize(self) -> None:
         pass
 
-    def _on_shutdown(self) -> None:
+    def _do_shutdown(self) -> None:
         pass
 
     def get_status(self) -> typing.List[str]:

@@ -18,6 +18,13 @@
 ## You should have received a copy of the GNU General Public License
 ## along with Microscope.  If not, see <http://www.gnu.org/licenses/>.
 
+"""Test devices for use during development.
+
+This module provides a series of test devices, which mimic real
+hardware behaviour.  They implement the different ABC.
+
+"""
+
 import logging
 import random
 import time
@@ -29,7 +36,9 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 import microscope
+import microscope._utils
 import microscope.abc
+
 
 _logger = logging.getLogger(__name__)
 
@@ -162,7 +171,9 @@ class _ImageGenerator:
         )
 
 
-class TestCamera(microscope.abc.Camera):
+class TestCamera(
+    microscope._utils.OnlyTriggersOnceOnSoftwareMixin, microscope.abc.Camera
+):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         # Binning and ROI
@@ -303,15 +314,11 @@ class TestCamera(microscope.abc.Camera):
         _logger.info("Initializing.")
         self._initialized = True
 
-    def make_safe(self):
-        if self._acquiring:
-            self.abort()
-
-    def _on_disable(self):
+    def _do_disable(self):
         self.abort()
 
     @must_be_initialized
-    def _on_enable(self):
+    def _do_enable(self):
         _logger.info("Preparing for acquisition.")
         if self._acquiring:
             self.abort()
@@ -334,10 +341,15 @@ class TestCamera(microscope.abc.Camera):
         return (512, 512)
 
     def get_trigger_type(self):
+        # deprecated, use trigger_type and trigger_mode properties
         return microscope.abc.TRIGGER_SOFT
 
     @must_be_initialized
     def soft_trigger(self):
+        # deprecated, use self.trigger()
+        self.trigger()
+
+    def _do_trigger(self) -> None:
         _logger.info(
             "Trigger received; self._acquiring is %s.", self._acquiring
         )
@@ -358,7 +370,7 @@ class TestCamera(microscope.abc.Camera):
     def _set_roi(self, roi):
         self._roi = roi
 
-    def _on_shutdown(self):
+    def _do_shutdown(self) -> None:
         pass
 
 
@@ -388,11 +400,14 @@ class TestFilterWheel(microscope.abc.FilterWheel):
     def initialize(self):
         pass
 
-    def _on_shutdown(self):
+    def _do_shutdown(self) -> None:
         pass
 
 
-class TestLaser(microscope.abc.Laser):
+class TestLightSource(
+    microscope._utils.OnlyTriggersBulbOnSoftwareMixin,
+    microscope.abc.LightSource,
+):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._power = 0.0
@@ -401,17 +416,17 @@ class TestLaser(microscope.abc.Laser):
     def get_status(self):
         return [str(x) for x in (self._emission, self._power, self._set_point)]
 
-    def _on_enable(self):
+    def _do_enable(self):
         self._emission = True
         return self._emission
 
-    def _on_shutdown(self):
+    def _do_shutdown(self) -> None:
         pass
 
     def initialize(self):
         pass
 
-    def _on_disable(self):
+    def _do_disable(self):
         self._emission = False
         return self._emission
 
@@ -429,10 +444,21 @@ class TestLaser(microscope.abc.Laser):
             return 0.0
 
 
-class TestDeformableMirror(microscope.abc.DeformableMirror):
+class TestLaser(TestLightSource):
+    # Deprecated, kept for backwards compatibility.
+    pass
+
+
+class TestDeformableMirror(
+    microscope._utils.OnlyTriggersOnceOnSoftwareMixin,
+    microscope.abc.DeformableMirror,
+):
     def __init__(self, n_actuators, **kwargs):
         super().__init__(**kwargs)
         self._n_actuators = n_actuators
+
+    def _do_shutdown(self) -> None:
+        pass
 
     @property
     def n_actuators(self) -> int:
@@ -440,26 +466,6 @@ class TestDeformableMirror(microscope.abc.DeformableMirror):
 
     def _do_apply_pattern(self, pattern):
         self._current_pattern = pattern
-
-    @property
-    def trigger_type(self) -> microscope.TriggerType:
-        return microscope.TriggerType.SOFTWARE
-
-    @property
-    def trigger_mode(self) -> microscope.TriggerMode:
-        return microscope.TriggerMode.ONCE
-
-    def set_trigger(
-        self, ttype: microscope.TriggerType, tmode: microscope.TriggerMode
-    ) -> None:
-        if ttype is not microscope.TriggerType.SOFTWARE:
-            raise microscope.UnsupportedFeatureError(
-                "the only trigger type supported is software"
-            )
-        if tmode is not microscope.TriggerMode.ONCE:
-            raise microscope.UnsupportedFeatureError(
-                "the only trigger mode supported is 'once'"
-            )
 
     def get_current_pattern(self):
         """Method for debug purposes only.
@@ -480,7 +486,7 @@ class DummySLM(microscope.abc.Device):
     def initialize(self):
         pass
 
-    def _on_shutdown(self):
+    def _do_shutdown(self) -> None:
         pass
 
     def set_sim_diffraction_angle(self, theta):
@@ -523,7 +529,7 @@ class DummyDSP(microscope.abc.Device):
     def initialize(self):
         pass
 
-    def _on_shutdown(self):
+    def _do_shutdown(self) -> None:
         pass
 
     def Abort(self):
@@ -652,7 +658,7 @@ class TestStage(microscope.abc.Stage):
     def initialize(self) -> None:
         pass
 
-    def _on_shutdown(self) -> None:
+    def _do_shutdown(self) -> None:
         pass
 
     @property
@@ -695,5 +701,5 @@ class TestFloatingDevice(
                 "uid is not available until after initialisation"
             )
 
-    def _on_shutdown(self) -> None:
+    def _do_shutdown(self) -> None:
         pass

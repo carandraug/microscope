@@ -25,10 +25,13 @@ import serial
 import microscope
 import microscope.abc
 
+
 _logger = logging.getLogger(__name__)
 
 
-class DeepstarLaser(microscope.abc.SerialDeviceMixin, microscope.abc.Laser):
+class DeepstarLaser(
+    microscope.abc.SerialDeviceMixin, microscope.abc.LightSource
+):
     """Omicron DeepStar laser.
 
     Omicron LDM lasers can be bought with and without the LDM.APC
@@ -90,7 +93,7 @@ class DeepstarLaser(microscope.abc.SerialDeviceMixin, microscope.abc.Laser):
 
     # Turn the laser ON. Return True if we succeeded, False otherwise.
     @microscope.abc.SerialDeviceMixin.lock_comms
-    def _on_enable(self):
+    def _do_enable(self):
         _logger.info("Turning laser ON.")
         # Turn on deepstar mode with internal voltage ref
         # Enable internal peak power
@@ -117,7 +120,7 @@ class DeepstarLaser(microscope.abc.SerialDeviceMixin, microscope.abc.Laser):
             return False
         return True
 
-    def _on_shutdown(self):
+    def _do_shutdown(self) -> None:
         self.disable()
 
     def initialize(self):
@@ -125,16 +128,10 @@ class DeepstarLaser(microscope.abc.SerialDeviceMixin, microscope.abc.Laser):
 
     # Turn the laser OFF.
     @microscope.abc.SerialDeviceMixin.lock_comms
-    def _on_disable(self):
+    def _do_disable(self):
         _logger.info("Turning laser OFF.")
         self._write(b"LF")
         return self._readline().decode()
-
-    @microscope.abc.SerialDeviceMixin.lock_comms
-    def is_alive(self):
-        self._write(b"S?")
-        response = self._readline()
-        return response.startswith(b"S")
 
     # Return True if the laser is currently able to produce light. We assume this is equivalent
     # to the laser being in S2 mode.
@@ -175,3 +172,28 @@ class DeepstarLaser(microscope.abc.SerialDeviceMixin, microscope.abc.Laser):
 
         level = int(answer[len(query) :], 16)
         return float(level) / float(scale)
+
+    @property
+    def trigger_type(self) -> microscope.TriggerType:
+        return microscope.TriggerType.HIGH
+
+    @property
+    def trigger_mode(self) -> microscope.TriggerMode:
+        return microscope.TriggerMode.BULB
+
+    def set_trigger(
+        self, ttype: microscope.TriggerType, tmode: microscope.TriggerMode
+    ) -> None:
+        if ttype is not microscope.TriggerType.HIGH:
+            raise microscope.UnsupportedFeatureError(
+                "the only trigger type supported is 'high'"
+            )
+        if tmode is not microscope.TriggerMode.BULB:
+            raise microscope.UnsupportedFeatureError(
+                "the only trigger mode supported is 'bulb'"
+            )
+
+    def _do_trigger(self) -> None:
+        raise microscope.IncompatibleStateError(
+            "trigger does not make sense in trigger mode bulb, only enable"
+        )

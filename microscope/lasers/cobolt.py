@@ -22,12 +22,28 @@ import logging
 
 import serial
 
+import microscope._utils
 import microscope.abc
+
 
 _logger = logging.getLogger(__name__)
 
 
-class CoboltLaser(microscope.abc.SerialDeviceMixin, microscope.abc.Laser):
+class CoboltLaser(
+    microscope._utils.OnlyTriggersBulbOnSoftwareMixin,
+    microscope.abc.SerialDeviceMixin,
+    microscope.abc.LightSource,
+):
+    """Cobolt lasers.
+
+    The cobolt lasers are diode pumped lasers and only supports
+    `TriggerMode.SOFTWARE` (this is probably not completely true, some
+    cobolt lasers are probably not diode pumped and those should be
+    able to support other trigger modes, but we only got access to the
+    04 series).
+
+    """
+
     def __init__(self, com=None, baud=115200, timeout=0.01, **kwargs):
         super().__init__(**kwargs)
         self.connection = serial.Serial(
@@ -67,11 +83,6 @@ class CoboltLaser(microscope.abc.SerialDeviceMixin, microscope.abc.Laser):
         return self.get_status()
 
     @microscope.abc.SerialDeviceMixin.lock_comms
-    def is_alive(self):
-        response = self.send(b"l?")
-        return response in b"01"
-
-    @microscope.abc.SerialDeviceMixin.lock_comms
     def get_status(self):
         result = []
         for cmd, stat in [
@@ -86,7 +97,7 @@ class CoboltLaser(microscope.abc.SerialDeviceMixin, microscope.abc.Laser):
         return result
 
     @microscope.abc.SerialDeviceMixin.lock_comms
-    def _on_shutdown(self):
+    def _do_shutdown(self) -> None:
         # Disable laser.
         self.disable()
         self.send(b"@cob0")
@@ -103,7 +114,7 @@ class CoboltLaser(microscope.abc.SerialDeviceMixin, microscope.abc.Laser):
 
     # Turn the laser ON. Return True if we succeeded, False otherwise.
     @microscope.abc.SerialDeviceMixin.lock_comms
-    def _on_enable(self):
+    def _do_enable(self):
         _logger.info("Turning laser ON.")
         # Turn on emission.
         response = self.send(b"l1")

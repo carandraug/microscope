@@ -29,6 +29,7 @@ import hid
 import microscope
 import microscope.devices
 
+
 # Clarity constants. These may differ across products, so mangle names.
 # USB IDs
 _Clarity__VENDORID = 0x1F0A
@@ -162,13 +163,13 @@ class Clarity(microscope.devices.FilterWheelBase):
     def get_id(self):
         return self._send_command(__GETSERIAL)
 
-    def _on_enable(self):
+    def _do_enable(self):
         if not self.is_connected:
             self.open()
         self._send_command(__SETONOFF, __RUN)
         return self._send_command(__GETONOFF) == __RUN
 
-    def _on_disable(self):
+    def _do_disable(self):
         self._send_command(__SETONOFF, __SLEEP)
 
     def set_calibration(self, state):
@@ -279,7 +280,7 @@ class Clarity(microscope.devices.FilterWheelBase):
             pass
         return result
 
-    def _on_shutdown(self):
+    def _do_shutdown(self) -> None:
         pass
 
     def initialize(self):

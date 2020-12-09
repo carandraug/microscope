@@ -31,8 +31,10 @@ import typing
 import serial
 
 import microscope
+import microscope._utils
 import microscope.abc
 from microscope.controllers.lumencor import _SyncSerial
+
 
 _logger = logging.getLogger(__name__)
 
@@ -70,7 +72,7 @@ class _CoolLEDConnection:
 
     def set_css(self, css: bytes) -> None:
         """Set status for any number of channels."""
-        assert len(css) % 6 != 0, "css must be multiple of 6 (6 per channel)"
+        assert len(css) % 6 == 0, "css must be multiple of 6 (6 per channel)"
         with self._serial.lock:
             self._serial.write(b"CSS" + css + b"\n")
             answer = self._serial.readline()
@@ -127,7 +129,10 @@ class _CoolLEDChannelConnection:
         return self._get_css()[1:2].decode()
 
 
-class _CoolLEDChannel(microscope.abc.Laser):
+class _CoolLEDChannel(
+    microscope._utils.OnlyTriggersBulbOnSoftwareMixin,
+    microscope.abc.LightSource,
+):
     """Individual light devices that compose a CoolLED controller."""
 
     def __init__(
@@ -147,7 +152,7 @@ class _CoolLEDChannel(microscope.abc.Laser):
     def initialize(self) -> None:
         pass
 
-    def _on_shutdown(self) -> None:
+    def _do_shutdown(self) -> None:
         pass
 
     def get_status(self) -> typing.List[str]:
@@ -206,7 +211,7 @@ class CoolLED(microscope.abc.Controller):
 
     def __init__(self, port: str, **kwargs) -> None:
         super().__init__(**kwargs)
-        self._channels: typing.Mapping[str, microscope.abc.Laser] = {}
+        self._channels: typing.Mapping[str, microscope.abc.LightSource] = {}
 
         # CoolLED manual only has the baudrate, we guessed the rest.
         serial_conn = serial.Serial(
