@@ -23,12 +23,11 @@
 
 import logging
 
+import microscope
+import microscope.abc
 import picamera
 import picamera.array
 import RPi.GPIO as GPIO
-
-import microscope.abc
-from microscope.devices import Binning, Roi, keep_acquiring
 
 
 _logger = logging.getLogger(__name__)
@@ -60,12 +59,14 @@ class PiCamera(microscope.abc.Camera):
         self._triggered = False
         self.camera = None
         # Region of interest.
-        self.roi = Roi(None, None, None, None)
+        self.roi = microscope.ROI(None, None, None, None)
         # Cycle time
         self.exposure_time = 0.001  # in seconds
         self.cycle_time = self.exposure_time
         # initialise in soft trigger mode
-        self.trigger = microscope.abc.TRIGGER_SOFT
+        self.set_trigger(
+            microscope.TriggerType.SOFTWARE, microscope.TriggerMode.ONCE
+        )
         # setup hardware triggerline
         GPIO.setmode(GPIO.BCM)
         GPIO.setup(GPIO_Trigger.GPIO.IN)
@@ -134,6 +135,7 @@ class PiCamera(microscope.abc.Camera):
             self.trigger = microscope.abc.TRIGGER_BEFORE
 
     def get_trigger_type(self):
+        # DEPRECATED: use the trigger_* properties
         return self.trigger
 
     def _get_roi(self):
@@ -144,12 +146,12 @@ class PiCamera(microscope.abc.Camera):
         return True
 
     def _get_binning(self):
-        return Binning(1, 1)
+        return microscope.Binning(1, 1)
 
-    @keep_acquiring
+    @microscope.abc.keep_acquiring
     def _set_roi(self, left, top, width, height):
         """Set the ROI to (left, tip, width, height)."""
-        self.roi = Roi(left, top, width, height)
+        self.roi = microscope.ROI(left, top, width, height)
 
     # set camera LED status, off is best for microscopy.
     def setLED(self, state=False):
@@ -174,7 +176,7 @@ class PiCamera(microscope.abc.Camera):
         return res
 
     def soft_trigger(self):
-        # DEPRECATED: implement _do_trigger instead as requried by
+        # DEPRECATED: implement _do_trigger instead as required by
         # TriggerTargetMixin
         _logger.info(
             "Trigger received; self._acquiring is %s." % self._acquiring
@@ -184,6 +186,25 @@ class PiCamera(microscope.abc.Camera):
 
     def HWtrigger(self, pin):
         _logger.info("HWTrigger received")
+
+    def _do_shutdown(self) -> None:
+        raise NotImplementedError()
+
+    def _do_trigger(self) -> None:
+        raise NotImplementedError()
+
+    def set_trigger(
+        self, ttype: microscope.TriggerType, tmode: microscope.TriggerMode
+    ) -> None:
+        raise NotImplementedError()
+
+    @property
+    def trigger_type(self) -> microscope.TriggerType:
+        raise NotImplementedError()
+
+    @property
+    def trigger_mode(self) -> microscope.TriggerMode:
+        raise NotImplementedError()
 
 
 # ongoing implemetation notes
