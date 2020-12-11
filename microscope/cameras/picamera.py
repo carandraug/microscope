@@ -57,7 +57,6 @@ class PiCamera(microscope.abc.Camera):
         self._acquiring = False
         self._exposure_time = 0.1
         self._triggered = False
-        self.camera = None
         # Region of interest.
         self.roi = microscope.ROI(None, None, None, None)
         # Cycle time
@@ -78,13 +77,7 @@ class PiCamera(microscope.abc.Camera):
             GPIO_Trigger, GPIO.RAISING, callback=self._HW_trigger, bouncetime=10
         )
 
-        if not self.camera:
-            try:
-                # initialise camera in still image mode.
-                self.camera = picamera.PiCamera(sensor_mode=2)
-            except:
-                raise Exception("Problem opening camera.")
-        _logger.info("Initializing camera.")
+        self._camera = picamera.PiCamera(sensor_mode=2)
         # create img buffer to hold images.
         # disable camera LED by default
         self.setLED(False)
@@ -96,8 +89,8 @@ class PiCamera(microscope.abc.Camera):
 
     def _fetch_data(self):
         if self._acquiring and self._triggered:
-            with picamera.array.PiYUVArray(self.camera) as output:
-                self.camera.capture(output, format="yuv", use_video_port=False)
+            with picamera.array.PiYUVArray(self._camera) as output:
+                self._camera.capture(output, format="yuv", use_video_port=False)
                 # just return intensity values
                 _logger.info("Sending image")
                 self._triggered = False
@@ -155,23 +148,23 @@ class PiCamera(microscope.abc.Camera):
 
     # set camera LED status, off is best for microscopy.
     def setLED(self, state=False):
-        print("self.camera.led(state)")
+        print("self._camera.led(state)")
 
     def set_exposure_time(self, value):
         # exposure times are set in us.
-        self.camera.shutter_speed = int(value * 1.0e6)
+        self._camera.shutter_speed = int(value * 1.0e6)
 
     def get_exposure_time(self):
         # exposure times are in us, so multiple by 1E-6 to get seconds.
-        return self.camera.exposure_speed * 1.0e-6
+        return self._camera.exposure_speed * 1.0e-6
 
     def get_cycle_time(self):
         # fudge to make it work initially
         # exposure times are in us, so multiple by 1E-6 to get seconds.
-        return self.camera.exposure_speed * 1.0e-6 + 0.1
+        return self._camera.exposure_speed * 1.0e-6 + 0.1
 
     def _get_sensor_shape(self):
-        res = self.camera.resolution
+        res = self._camera.resolution
         self._set_roi(0, 0, res[0], res[1])
         return res
 
