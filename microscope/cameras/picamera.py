@@ -18,36 +18,37 @@
 ## You should have received a copy of the GNU General Public License
 ## along with Microscope.  If not, see <http://www.gnu.org/licenses/>.
 
-import time
-from io import BytesIO
+"""RaspberryPi camera modules.
+"""
 
-import numpy as np
-import Pyro4
+import logging
 
 import picamera
 import picamera.array
 import RPi.GPIO as GPIO
-from microscope import devices
+
+import microscope.abc
 from microscope.devices import Binning, Roi, keep_acquiring
+
+
+_logger = logging.getLogger(__name__)
 
 
 GPIO_Trigger = 21
 
 
-# Trigger mode to type.
+# TODO: replace with microscope.TriggerType and microscope.TriggerMode
 TRIGGER_MODES = {
     "internal": None,
-    "external": devices.TRIGGER_BEFORE,
+    "external": microscope.abc.TRIGGER_BEFORE,
     "external start": None,
-    "external exposure": devices.TRIGGER_DURATION,
-    "software": devices.TRIGGER_SOFT,
+    "external exposure": microscope.abc.TRIGGER_DURATION,
+    "software": microscope.abc.TRIGGER_SOFT,
 }
 
 
-@Pyro4.expose
-@Pyro4.behavior("single")
-class PiCamera(devices.CameraDevice):
-    def __init__(self, *args, **kwargs):
+class PiCamera(microscope.abc.Camera):
+    def __init__(self, **kwargs) -> None:
         super(PiCamera, self).__init__(**kwargs)
         # example parameter to allow setting.
         #        self.add_setting('_error_percent', 'int',
@@ -64,7 +65,7 @@ class PiCamera(devices.CameraDevice):
         self.exposure_time = 0.001  # in seconds
         self.cycle_time = self.exposure_time
         # initialise in soft trigger mode
-        self.trigger = devices.TRIGGER_SOFT
+        self.trigger = microscope.abc.TRIGGER_SOFT
         # setup hardware triggerline
         GPIO.setmode(GPIO.BCM)
         GPIO.setup(GPIO_Trigger.GPIO.IN)
@@ -76,6 +77,18 @@ class PiCamera(devices.CameraDevice):
             GPIO_Trigger, GPIO.RAISING, callback=self._HW_trigger, bouncetime=10
         )
 
+        if not self.camera:
+            try:
+                # initialise camera in still image mode.
+                self.camera = picamera.PiCamera(sensor_mode=2)
+            except:
+                raise Exception("Problem opening camera.")
+        _logger.info("Initializing camera.")
+        # create img buffer to hold images.
+        # disable camera LED by default
+        self.setLED(False)
+        self._get_sensor_shape()
+
     def _HW_trigger(self):
         """Function called by GPIO interupt, needs to trigger image capture"""
         print("PiCam HW trigger")
@@ -85,56 +98,40 @@ class PiCamera(devices.CameraDevice):
             with picamera.array.PiYUVArray(self.camera) as output:
                 self.camera.capture(output, format="yuv", use_video_port=False)
                 # just return intensity values
-                self._logger.info("Sending image")
+                _logger.info("Sending image")
                 self._triggered = False
                 return output.array[:, :, 0]
 
     def initialize(self):
-        """Initialise the Pi Camera camera.
-        Open the connection, connect properties and populate settings dict.
-        """
-        if not self.camera:
-            try:
-                # initialise camera in still image mode.
-                self.camera = picamera.PiCamera(sensor_mode=2)
-            except:
-                raise Exception("Problem opening camera.")
-        self._logger.info("Initializing camera.")
-        # create img buffer to hold images.
-        # disable camera LED by default
-        self.setLED(False)
-        self._get_sensor_shape()
+        pass
 
-    def make_safe(self):
-        if self._acquiring:
-            self.abort()
-
-    def _on_disable(self):
+    def _do_disable(self):
         self.abort()
 
-    def _on_enable(self):
-        self._logger.info("Preparing for acquisition.")
+    def _do_enable(self):
+        _logger.info("Preparing for acquisition.")
         if self._acquiring:
             self.abort()
         self._acquiring = True
         # actually start camera
-        self._logger.info("Acquisition enabled.")
+        _logger.info("Acquisition enabled.")
         return True
 
     def abort(self):
-        self._logger.info("Disabling acquisition.")
+        _logger.info("Disabling acquisition.")
         if self._acquiring:
             self._acquiring = False
 
     def set_trigger_type(self, trigger):
-        if trigger == devices.TRIGGER_SOFT:
+        # DEPRECATED, implement methods defined in TriggerTargetMixin
+        if trigger == microscope.abc.TRIGGER_SOFT:
             GPIO.remove_event_detect(GPIO_Trigger)
-            self.trigger = devices.TRIGGER_SOFT
-        elif trigger == devices.TRIGGER_BEFORE:
+            self.trigger = microscope.abc.TRIGGER_SOFT
+        elif trigger == microscope.abc.TRIGGER_BEFORE:
             GPIO.add_event_detect(
                 GPIO_Trigger, RISING, self.HWtrigger, self.exposure_time
             )
-            self.trigger = devices.TRIGGER_BEFORE
+            self.trigger = microscope.abc.TRIGGER_BEFORE
 
     def get_trigger_type(self):
         return self.trigger
@@ -177,14 +174,16 @@ class PiCamera(devices.CameraDevice):
         return res
 
     def soft_trigger(self):
-        self._logger.info(
+        # DEPRECATED: implement _do_trigger instead as requried by
+        # TriggerTargetMixin
+        _logger.info(
             "Trigger received; self._acquiring is %s." % self._acquiring
         )
         if self._acquiring:
             self._triggered = True
 
     def HWtrigger(self, pin):
-        self._logger.info("HWTrigger received")
+        _logger.info("HWTrigger received")
 
 
 # ongoing implemetation notes
