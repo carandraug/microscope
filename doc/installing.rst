@@ -7,15 +7,7 @@
    no Back-Cover Texts.  A copy of the license is included in the
    section entitled "GNU Free Documentation License".
 
-Contributors
-============
+Installing
+**********
 
-The following people have contributed in the development of
-Microscope:
-
-- Amy Howard
-- David Miguel Susano Pinto
-- Ian Dobbie
-- Julio Mateos-Langerak
-- Mick Phillips
-- Tiago Susano Pinto
+.. include:: ../INSTALL

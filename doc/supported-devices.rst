@@ -1,4 +1,4 @@
-.. Copyright (C) 2017 David Pinto <david.pinto@bioch.ox.ac.uk>
+.. Copyright (C) 2020 David Miguel Susano Pinto <carandraug@gmail.com>
 
    Permission is granted to copy, distribute and/or modify this
    document under the terms of the GNU Free Documentation License,
@@ -13,23 +13,47 @@ List of supported devices
 Cameras
 -------
 
-- Andor (:class:`microscope.cameras.andorsdk3`)
-- Photometrics PVCAM (:class:`microscope.cameras.pvcam`)
+- Andor (:class:`microscope.cameras.andorsdk3` and
+  :class:`microscope.cameras.atmcd`)
+- Photometrics (:class:`microscope.cameras.pvcam`)
+- QImaging (:class:`microscope.cameras.pvcam`)
+- Ximea (:class:`microscope.cameras.ximea`)
 
 Deformable Mirrors
 ------------------
 
 - Alpao (:class:`microscope.mirror.alpao`)
 - Boston Micromachines Corporation (:class:`microscope.mirror.bmc`)
+- Imagine Optic Mirao 52e (:class:`microscope.mirror.mirao52e`)
 
 Filter Wheels
 -------------
 
+- Aurox Clarity (:class:`microscope.filterwheels.aurox`)
+- Prior (:class:`microscope.controllers.prior`)
 - Thorlabs (:class:`microscope.filterwheels.thorlabs`)
+- Zaber (:class:`microscope.controllers.zaber.ZaberDaisyChain`)
 
-Lasers
-------
+Light Sources
+-------------
 
 - Cobolt (:class:`microscope.lasers.cobolt`)
-- Coherent Sapphire (:class:`microscope.lasers.saphhire`)
+- Coherent Obis (:class:`microscope.lasers.obis`)
+- Coherent Sapphire (:class:`microscope.lasers.sapphire`)
 - Omicron Deepstar (:class:`microscope.lasers.deepstar`)
+- Toptica iBeam (:class:`microscope.lasers.toptica`)
+
+Controllers
+-----------
+
+- CoolLED (:class:`microscope.controllers.coolled`)
+- Prior ProScan III (:class:`microscope.controllers.prior`)
+- Lumencor Spectra III light engine (:class:`microscope.controllers.lumencor`)
+- Zaber daisy chain devices
+  (:class:`microscope.controllers.zaber.ZaberDaisyChain`)
+- Zaber LED controller (:class:`microscope.controllers.zaber.ZaberDaisyChain`)
+
+Stages
+------
+
+- Zaber (:class:`microscope.controllers.zaber.ZaberDaisyChain`)
