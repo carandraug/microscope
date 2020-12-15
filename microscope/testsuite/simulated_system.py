@@ -26,7 +26,7 @@ import time
 import typing
 
 import numpy as np
-import PIL
+import PIL.Image
 import scipy.ndimage
 
 import microscope
@@ -65,7 +65,7 @@ class StageAwareCamera(TestCamera):
         self._image = image
         self._stage = stage
         self._filterwheel = filterwheel
-        self._pixel_size = 1.0  # TODO: make this configurable, maybe?
+        self._pixel_size = 1.0
 
         if not all([name in stage.axes.keys() for name in ["x", "y", "z"]]):
             raise microscope.InitialiseError(
@@ -81,6 +81,16 @@ class StageAwareCamera(TestCamera):
         # which we don't need.  We probably should have a simpler
         # TestCamera that we could subclass.
         self._settings = {}
+
+        self.add_setting(
+            "pixel size",
+            "float",
+            lambda: self._pixel_size,
+            lambda pxsz: setattr(self, "_pixel_size", pxsz),
+            # technically should be: (nextafter(0.0, inf), nextafter(inf, 0.0))
+            values=(0.0, float("inf")),
+            readonly=False,
+        )
 
     def _fetch_data(self) -> typing.Optional[np.ndarray]:
         if not self._acquiring or self._triggered == 0:
@@ -107,6 +117,9 @@ class StageAwareCamera(TestCamera):
         image = scipy.ndimage.gaussian_filter(subsection, blur)
 
         self._sent += 1
+        # Not sure this flipping is correct but it's required to make
+        # cockpit mosaic work.  This is probably related to not having
+        # defined what the image origin should be (see issue #89).
         return np.fliplr(np.flipud(image))
 
 
