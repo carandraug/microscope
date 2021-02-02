@@ -9,7 +9,7 @@ Wrapper to the Kinesis (thorlabs) C API for NanoMax stage
 
 import ctypes
 
-from ctypes import c_char_p, c_int, c_short, c_bool
+from ctypes import c_char_p, c_int, c_short, c_bool, POINTER, c_double
 from ctypes.wintypes import DWORD
 
 
@@ -51,8 +51,20 @@ SBC_MoveToPosition = make_prototype("SBC_MoveToPosition",[c_char_p,c_short, c_in
 SBC_StopPolling = make_prototype("SBC_StopPolling",[c_char_p, c_short])
 # [serialNo, channel]
 
-SBC_Close=make_prototype("SBC_Close",[c_char_p])
+SBC_Close = make_prototype("SBC_Close",[c_char_p])
 # [serialNo]
+
 def make_serialnr(sn):
     """Formatting the 8-digit int serial number (ex 70897524) for e.g SBC_Open"""
     return c_char_p(bytes(str(sn), "utf-8"))
+
+# ----------- Untested methods ------------
+SBC_getNumChannels = make_prototype("SBC_getNumChannels", [c_char_p],restype = c_short)
+# [*serialNo]
+
+SBC_GetRealValueFromDeviceUnit = make_prototype("SBC_GetRealValueFromDeviceUnit", 
+                                [c_char_p, c_short, c_int, POINTER(c_double), c_int])
+#[*serialNo, channel, device_unit, *real unit, unitType]
+
+SBC_MoveRelative =  make_prototype("SBC_MoveRelative",[c_char_p, c_short, c_int])
+#[*serialNo, channel, displacement]
