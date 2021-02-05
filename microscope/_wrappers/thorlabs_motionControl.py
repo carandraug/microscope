@@ -73,6 +73,11 @@ SBC_MoveRelative =  make_prototype("SBC_MoveRelative",[c_char_p, c_short, c_int]
 SBC_GetPosition = make_prototype("SBC_GetPosition", [c_char_p, c_short], c_int)
 # [*serialNo, channel]
 
+SBC_GetMotorTravelLimits = make_prototype("SBC_GetMotorTravelLimits", 
+                      [c_char_p, c_short, POINTER(c_double), POINTER(c_double)])
+# [serial_number, channel, min_position, max_position]
+
+
 errors_dict = {
     1:"FT_InvalidHandle - The FTDI functions have not been initialized",
     2:"FT_DeviceNotFound - The Device could not be found",
