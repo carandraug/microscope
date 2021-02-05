@@ -68,3 +68,6 @@ SBC_GetRealValueFromDeviceUnit = make_prototype("SBC_GetRealValueFromDeviceUnit"
 
 SBC_MoveRelative =  make_prototype("SBC_MoveRelative",[c_char_p, c_short, c_int])
 #[*serialNo, channel, displacement]
+
+SBC_GetPosition = make_prototype("SBC_GetPosition", [c_char_p, c_short], c_int)
+# [*serialNo, channel]
