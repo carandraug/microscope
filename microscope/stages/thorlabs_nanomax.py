@@ -6,8 +6,6 @@ Created on Tue Feb  2 09:46:11 2021
 @author: aurelien
 """
 import microscope
-import typing
-
 
 try:
     import microscope._wrappers.thorlabs_motionControl as TMC
@@ -16,7 +14,7 @@ except Exception as e:
     
 import microscope.abc
 
-from ctypes import c_char_p
+from ctypes import c_char_p, c_double
 
 class ThorlabsNanoMaxAxis(microscope.abc.StageAxis):
     def __init__(self, serial_number, axis):
@@ -29,16 +27,28 @@ class ThorlabsNanoMaxAxis(microscope.abc.StageAxis):
         self.axis = axis
         
     def limits(self):
-        pass
+        mintravel = c_double(20)
+        maxtravel = c_double(10)
+        TMC.SBC_GetMotorTravelLimits(self.serial_number, self.axis, mintravel, 
+                                 maxtravel)
+        return [mintravel.value, maxtravel.value]
+    
     def move_by(self, delta):
         status = TMC.SBC_MoveRelative(self.serial_number,self.axis,delta)
         if status:
-            raise microscope.DeviceError("TBD")
+            message = "Error"
+            if status in TMC.errors_dict.keys():
+                message = TMC.errors_dict[status]
+            raise microscope.DeviceError(message)
+            
     def move_to(self, pos):
         # pos: int
         status = TMC.SBC_MoveToPosition(self.serial_number, self.axis, pos)
         if status:
-            raise microscope.DeviceError("TBD")
+            message = "Error"
+            if status in TMC.errors_dict.keys():
+                message = TMC.errors_dict[status]
+            raise microscope.DeviceError(message)
             
     def position(self):
         pos = TMC.SBC_GetPosition(self.serial_number, self.axis)
@@ -68,13 +78,19 @@ class ThorlabsNanoMax(microscope.abc.Stage):
         for channel_nr in range(self.n_axes):
             status = TMC.SBC_Home(self.serial_number, channel_nr+1)
             if status:
-                raise microscope.DeviceError("TBD")
+                message = "Error"
+                if status in TMC.errors_dict.keys():
+                    message = TMC.errors_dict[status]
+                raise microscope.DeviceError(message)
         
     
     def _do_shutdown(self):
         status = TMC.SBC_Close(self.serial_number)
         if status:
-            raise microscope.DeviceError("Cannot close device")
+            message = "Error"
+            if status in TMC.errors_dict.keys():
+                message = TMC.errors_dict[status]
+            raise microscope.DeviceError(message)
         
     @property
     def axes(self):
