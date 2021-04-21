@@ -1,4 +1,4 @@
-.. image:: doc/_static/python-microscope.svg
+.. image:: https://github.com/carandraug/python-microscope.org/raw/master/_static/microscope-logo-96-dpi.png
    :align: center
    :alt: Python-Microscope icon
 
