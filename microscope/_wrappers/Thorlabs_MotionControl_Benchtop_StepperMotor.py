@@ -1,21 +1,29 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Nov 16 17:54:00 2020
+#!/usr/bin/env python3
 
-@author: aurel
+## Copyright (C) 2020 Aurelien Barbotin
+##
+## This file is part of Microscope.
+##
+## Microscope is free software: you can redistribute it and/or modify
+## it under the terms of the GNU General Public License as published by
+## the Free Software Foundation, either version 3 of the License, or
+## (at your option) any later version.
+##
+## Microscope is distributed in the hope that it will be useful,
+## but WITHOUT ANY WARRANTY; without even the implied warranty of
+## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+## GNU General Public License for more details.
+##
+## You should have received a copy of the GNU General Public License
+## along with Microscope.  If not, see <http://www.gnu.org/licenses/>.
 
-Wrapper to the Kinesis (thorlabs) C API for NanoMax stage
-"""
+"""Wrapper to Thorlabs.MotionControl.Benchtop.StepperMotor.dll."""
 
 import ctypes
-
-from ctypes import c_char_p, c_int, c_short, c_bool, POINTER, c_double
-from ctypes.wintypes import DWORD
+from ctypes import POINTER, c_bool, c_char_p, c_double, c_int, c_short
 
 
-# path = "Thorlabs.MotionControl.Benchtop.Piezo.dll"
-SDK = ctypes.WinDLL("Thorlabs.MotionControl.Benchtop.StepperMotor.dll")
-# SDK = ctypes.CDLL(path)
+SDK = ctypes.CDLL("Thorlabs.MotionControl.Benchtop.StepperMotor.dll")
 
 # from BMC stuff
 RC = c_short  # enum for error codes
@@ -27,19 +35,6 @@ def make_prototype(name, argtypes, restype=RC):
     func.restype = restype
     return func
 
-
-TLI_BuildDeviceList = make_prototype(
-    "TLI_BuildDeviceList", [], restype=c_short
-)
-
-TLI_GetDeviceListSize = make_prototype(
-    "TLI_GetDeviceListSize", [], restype=c_short
-)
-
-TLI_GetDeviceListByTypeExt = make_prototype(
-    "TLI_GetDeviceListByTypeExt", [c_char_p, DWORD, c_int], restype=c_short
-)
-# [receiveBuffer, sizeOfBuffer, typeID]
 
 SBC_Open = make_prototype("SBC_Open", [c_char_p], restype=c_short)
 # [serialNo]
@@ -99,6 +94,8 @@ SBC_GetMotorTravelLimits = make_prototype(
     [c_char_p, c_short, POINTER(c_double), POINTER(c_double)],
 )
 # [serial_number, channel, min_position, max_position]
+
+# SBC_LoadSettings = make_prototype("SBC_LoadSettings", [c_char_p, c_short]))
 
 
 errors_dict = {

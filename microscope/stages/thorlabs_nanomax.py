@@ -5,19 +5,17 @@ Created on Tue Feb  2 09:46:11 2021
 
 @author: aurelien
 """
+import time
+from ctypes import c_char_p, c_double, create_string_buffer
+
 import microscope
+import microscope.abc
+
 
 try:
     import microscope._wrappers.thorlabs_motionControl as TMC
 except Exception as e:
     raise microscope.LibraryLoadError(e) from e
-
-import microscope
-import microscope.abc
-
-from ctypes import c_char_p, c_double, create_string_buffer
-
-import time
 
 
 class ThorlabsNanoMaxAxis(microscope.abc.StageAxis):
