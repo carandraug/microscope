@@ -153,8 +153,9 @@ else:
 # for user information.
 manifest_files = [
     "COPYING",
-    "NEWS",
-    "README",
+    "NEWS.rst",
+    "README.rst",
+    "INSTALL.rst",
 ]
 
 
@@ -168,7 +169,8 @@ setuptools.setup(
     name=project_name,
     version=project_version,
     description="An interface for control of microscope devices.",
-    long_description=open("README", "r").read(),
+    long_description=open("README.rst", "r").read(),
+    long_description_content_type="text/x-rst",
     license="GPL-3.0+",
     # We need an author and an author_email value or PyPI rejects us.
     # For email address, when there are multiple authors, they tell us
@@ -184,7 +186,7 @@ setuptools.setup(
         "Tracker": "https://github.com/python-microscope/microscope",
     },
     packages=setuptools.find_packages(),
-    python_requires=">=3.6",
+    python_requires=">=3.7",
     install_requires=["Pillow", "Pyro4", "hidapi", "numpy", "pyserial"],
     extras_require={"GUI": ["PySide2"]},
     entry_points={
