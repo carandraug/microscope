@@ -20,48 +20,49 @@
 """Wrapper to Thorlabs.MotionControl.Benchtop.StepperMotor.dll."""
 
 import ctypes
-from ctypes import POINTER, c_bool, c_char_p, c_double, c_int, c_short
+from ctypes import c_bool, c_char_p, c_double, c_int, c_short
+from ctypes.wintypes import DWORD
 
 
 SDK = ctypes.CDLL("Thorlabs.MotionControl.Benchtop.StepperMotor.dll")
 
-# from BMC stuff
-RC = c_short  # enum for error codes
+
+# enums
+MOTOR_HOMED
+MOTOR_HOMING
 
 
-def make_prototype(name, argtypes, restype=RC):
+def prototype(name, argtypes, restype=c_short):
     func = getattr(SDK, name)
     func.argtypes = argtypes
     func.restype = restype
     return func
 
 
-SBC_Open = make_prototype("SBC_Open", [c_char_p], restype=c_short)
-# [serialNo]
+Close = prototype("SBC_Close", [c_char_p])
 
-SBC_StartPolling = make_prototype(
-    "SBC_StartPolling", [c_char_p, c_short, c_int], restype=c_bool
+GetMotorTravelLimits = prototype(
+    "SBC_GetMotorTravelLimits",
+    [c_char_p, c_short, ctypes.POINTER(c_double), ctypes.POINTER(c_double)],
 )
-# [serialNo, channel, milliseconds]
 
-SBC_ClearMessageQueue = make_prototype(
-    "SBC_ClearMessageQueue", [c_char_p, c_short], restype=c_short
-)
-# [serialNo, channel]
+GetPosition = prototype("SBC_GetPosition", [c_char_p, c_short], c_int)
 
-SBC_Home = make_prototype("SBC_Home", [c_char_p, c_short], restype=c_short)
-# [serialNo, channel]
+GetStatusBits = prototype("SBC_GetStatusBits", [c_char_p, c_short], DWORD)
 
-SBC_MoveToPosition = make_prototype(
-    "SBC_MoveToPosition", [c_char_p, c_short, c_int], restype=c_short
-)
-# [serialnr, channel, index]
+Home = prototype("SBC_Home", [c_char_p, c_short])
 
-SBC_StopPolling = make_prototype("SBC_StopPolling", [c_char_p, c_short])
-# [serialNo, channel]
+IsChannelValid = prototype("SBC_IsChannelValid", [c_char_p, c_short], c_bool)
 
-SBC_Close = make_prototype("SBC_Close", [c_char_p])
-# [serialNo]
+LoadSettings = prototype("SBC_LoadSettings", [c_char_p, c_short], c_bool)
+
+MoveRelative = prototype("SBC_MoveRelative", [c_char_p, c_short, c_int])
+
+MoveToPosition = prototype("SBC_MoveToPosition", [c_char_p, c_short, c_int])
+
+Open = prototype("SBC_Open", [c_char_p])
+
+RequestStatusBits = prototype("SBC_RequestStatusBits", [c_char_p, c_short])
 
 
 def make_serialnr(sn):
@@ -70,32 +71,22 @@ def make_serialnr(sn):
 
 
 # ----------- Untested methods ------------
-SBC_getNumChannels = make_prototype(
+SBC_getNumChannels = prototype(
     "SBC_getNumChannels", [c_char_p], restype=c_short
 )
 # [*serialNo]
 
-SBC_GetRealValueFromDeviceUnit = make_prototype(
+SBC_GetRealValueFromDeviceUnit = prototype(
     "SBC_GetRealValueFromDeviceUnit",
     [c_char_p, c_short, c_int, POINTER(c_double), c_int],
 )
 # [*serialNo, channel, device_unit, *real unit, unitType]
 
-SBC_MoveRelative = make_prototype(
-    "SBC_MoveRelative", [c_char_p, c_short, c_int]
-)
 # [*serialNo, channel, displacement]
 
-SBC_GetPosition = make_prototype("SBC_GetPosition", [c_char_p, c_short], c_int)
 # [*serialNo, channel]
 
-SBC_GetMotorTravelLimits = make_prototype(
-    "SBC_GetMotorTravelLimits",
-    [c_char_p, c_short, POINTER(c_double), POINTER(c_double)],
-)
 # [serial_number, channel, min_position, max_position]
-
-# SBC_LoadSettings = make_prototype("SBC_LoadSettings", [c_char_p, c_short]))
 
 
 errors_dict = {

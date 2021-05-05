@@ -6,6 +6,7 @@ Created on Tue Feb  2 09:46:11 2021
 @author: aurelien
 """
 import time
+import ctypes
 from ctypes import c_char_p, c_double, create_string_buffer
 
 import microscope
@@ -79,7 +80,7 @@ class ThorlabsNanoMax(microscope.abc.Stage):
         #        serialNos = create_string_buffer(100)
         #        TMC.TLI_GetDeviceListByTypeExt(serialNos, 100, 70)
 
-        self.serial_number = c_char_p(bytes(serial_number, "utf-8"))
+        self.serial_number = ctypes.c_char_p(bytes(serial_number, "utf-8"))
         status = TMC.SBC_Open(self.serial_number)
 
         if status:
