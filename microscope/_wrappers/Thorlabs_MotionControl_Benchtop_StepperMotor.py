@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-## Copyright (C) 2020 Aurelien Barbotin
+## Copyright (C) 2021 Aurelien Barbotin
 ##
 ## This file is part of Microscope.
 ##
@@ -17,9 +17,21 @@
 ## You should have received a copy of the GNU General Public License
 ## along with Microscope.  If not, see <http://www.gnu.org/licenses/>.
 
-"""Wrapper to Thorlabs.MotionControl.Benchtop.StepperMotor.dll."""
+"""Wrapper to Thorlabs.MotionControl.Benchtop.StepperMotor.dll.
+
+This module does not include the ``TLI_*`` functions, those are found
+in the ``Thorlabs_MotionControl_DeviceManager`` module.  Recommended
+usage:
+
+.. code-block:: python
+
+    import microscope._wrappers.Thorlabs_MotionControl_DeviceManager as TLI
+    import microscope._wrappers.Thorlabs_MotionControl_Benchtop_StepperMotor as SBC
+
+"""
 
 import ctypes
+import enum
 from ctypes import c_bool, c_char_p, c_double, c_int, c_short
 from ctypes.wintypes import DWORD
 
@@ -27,9 +39,23 @@ from ctypes.wintypes import DWORD
 SDK = ctypes.CDLL("Thorlabs.MotionControl.Benchtop.StepperMotor.dll")
 
 
-# enums
-MOTOR_HOMED
-MOTOR_HOMING
+class StatusBits(enum.IntFlag):
+    """Status bits received from the device (see ``*GetStatusBits``)
+
+    These are not actual enums in the header file and they're only
+    mentioned on the documentation for ``SBC_GetStatusBits`` so
+    technically they shouldn't be on this file.  However, I really
+    they really should be actual enums there.
+
+    """
+
+    CW_HARDWARE_LIMIT = 0x00000001
+    CCW_HARDWARE_LIMIT = 0x00000002
+    CW_SOFTWARE_LIMIT = 0x00000004
+    CCW_SOFTWARE_LIMIT = 0x00000008
+    MOTOR_CONNECTED = 0x00000100
+    MOTOR_HOMING = 0x00000200
+    MOTOR_HOMED = 0x00000400
 
 
 def prototype(name, argtypes, restype=c_short):
@@ -65,30 +91,7 @@ Open = prototype("SBC_Open", [c_char_p])
 RequestStatusBits = prototype("SBC_RequestStatusBits", [c_char_p, c_short])
 
 
-def make_serialnr(sn):
-    """Formatting the 8-digit int serial number (ex 70897524) for e.g SBC_Open"""
-    return c_char_p(bytes(str(sn), "utf-8"))
-
-
-# ----------- Untested methods ------------
-SBC_getNumChannels = prototype(
-    "SBC_getNumChannels", [c_char_p], restype=c_short
-)
-# [*serialNo]
-
-SBC_GetRealValueFromDeviceUnit = prototype(
-    "SBC_GetRealValueFromDeviceUnit",
-    [c_char_p, c_short, c_int, POINTER(c_double), c_int],
-)
-# [*serialNo, channel, device_unit, *real unit, unitType]
-
-# [*serialNo, channel, displacement]
-
-# [*serialNo, channel]
-
-# [serial_number, channel, min_position, max_position]
-
-
+## FIXME: need a way to catch specific errors
 errors_dict = {
     1: "FT_InvalidHandle - The FTDI functions have not been initialized",
     2: "FT_DeviceNotFound - The Device could not be found",
