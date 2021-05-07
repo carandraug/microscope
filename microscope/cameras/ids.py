@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 ## Copyright (C) 2019 David Miguel Susano Pinto <david.pinto@bioch.ox.ac.uk>
@@ -37,6 +36,11 @@ import numpy as np
 import microscope.devices
 from microscope._wrappers import ueye
 
+import platform
+if platform.system() == 'Windows':
+    import ctypes.wintypes
+    import win32event
+    import win32api
 
 class IDSuEye(microscope.devices.TriggerTargetMixIn,
               microscope.devices.CameraDevice):
@@ -49,6 +53,7 @@ class IDSuEye(microscope.devices.TriggerTargetMixIn,
     def __init__(self, serial_number: str = None, **kwargs) -> None:
         super().__init__(**kwargs)
         self._handle = ueye.HIDS()
+        self._h_event=None
 
         ## Someday, we should make this a configuration.  Is there
         ## scope to make this part of the CameraDevice specification?
@@ -366,16 +371,63 @@ class IDSuEye(microscope.devices.TriggerTargetMixIn,
             data = self._ring_buffer[self._fetch_id_pointer.contents.value].copy()
             status = ueye.UnlockSeqBuf() #HIDS hCam, INT nNum, char* pcMem)
             return data
+
+        # ## FIXME: this is enough for software trigger and "slow"
+        # ## acquisition rates.  To achive faster speeds we need to set
+        # ## a ring buffer and maybe consider making use of freerun
+        # ## mode.
+
+        # if platform.system() == 'Windows':
+        #     if self._h_event is None:
+        #         return None
+        #     status = win32event.WaitForSingleObject(self._h_event, 1)
+        #     if status==win32event.WAIT_TIMEOUT:
+        #         return None
+        #     elif status!=win32event.WAIT_OBJECT_0:
+        #         raise RuntimeError('failed waiting for new image (win32error %d)'
+        #                        % status)
+
+
+        # elif platform.system() == 'Linux':
+        #     status = ueye.WaitEvent(self._handle, ueye.SET_EVENT_FRAME, 1)
+
+        #     if status == ueye.TIMED_OUT:
+        #         return None
+
+        #     if status != ueye.SUCCESS:
+        #         raise RuntimeError('failed to disable event')
+
         else:
-            ## Does this fails if we never set a an event in the first place?
-            raise RuntimeError('failed waiting for new image (error %d)'
-                               % status)
+            raise SystemError()
+
+        data = self._buffer.copy()
+        status = ueye.DisableEvent(self._handle, ueye.SET_EVENT_FRAME)
+        if status != ueye.SUCCESS:
+            raise RuntimeError()
+
+        if platform.system()=='Windows':
+            status = ueye.ExitEvent(self._handle, ueye.SET_EVENT_FRAME)
+            if status != ueye.SUCCESS:
+                raise RuntimeError()
+            status = win32api.CloseHandle(self._h_event)
+            self._h_event = None
+            if status == 0:
+                raise RuntimeError()
+        return data
+
 
 
     def trigger(self) -> None:
         if self._trigger_type != microscope.devices.TriggerType.SOFTWARE:
             raise RuntimeError("current trigger type is '%s', not SOFTWARE"
                                % self._trigger_type)
+
+        self._h_event = None
+        if platform.system() == 'Windows':
+            self._h_event = win32event.CreateEvent(None, False, False, None)
+            self.event = ctypes.wintypes.HANDLE(int(self._h_event))
+            ueye.InitEvent(self._handle, self.event, ueye.SET_EVENT_FRAME)
+
         ## XXX: to support START/STROBE modes, I think we need to call
         ## CaptureVideo instead.
         status = ueye.FreezeVideo(self._handle, ueye.DONT_WAIT)
@@ -544,3 +596,12 @@ class _CameraRingBuffer:
         obj = self._buffer[self._next]
         self._next = (self._next +1) % len(self._buffer)
         return obj
+
+def testfunction():
+    import time
+    d=IDSuEye()
+    d.trigger()
+#    time.sleep(1)
+    d._fetch_data()
+#d=IDSuEye()
+#testfunction()
