@@ -138,7 +138,11 @@ class _LudlController:
 
     def get_number_axes(self):
         return 2
-    
+
+    def close(self) -> None:
+        with self._lock:
+            self._serial.close()
+
     def command(self, command: bytes) -> None:
         """Send command to device."""
         with self._lock:
@@ -455,6 +459,10 @@ class ludlMC2000(microscope.abc.Controller):
     @property
     def devices(self) -> typing.Mapping[str, microscope.abc.Device]:
         return self._devices
+
+    def _do_shutdown(self) -> None:
+        super()._do_shutdown()
+        self._conn.close()
 
 # ludl controller can do filter wheels so leave this code for future adoption
 #

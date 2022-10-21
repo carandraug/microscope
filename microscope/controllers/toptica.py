@@ -274,8 +274,8 @@ class iChromeMLE(microscope.abc.Controller):
             rtscts=False,
             dsrdtr=False,
         )
-        shared_serial = microscope._utils.SharedSerial(serial_conn)
-        ichrome_connection = _iChromeConnection(shared_serial)
+        self._shared_serial = microscope._utils.SharedSerial(serial_conn)
+        ichrome_connection = _iChromeConnection(self._shared_serial)
 
         _LOGGER.info("Connected to %s", ichrome_connection.get_serial_number())
 
@@ -297,3 +297,7 @@ class iChromeMLE(microscope.abc.Controller):
     @property
     def devices(self) -> typing.Dict[str, _iChromeLaser]:
         return self._lasers
+
+    def _do_shutdown(self) -> None:
+        super()._do_shutdown()
+        self._shared_serial.close()

@@ -138,6 +138,8 @@ class ObisLaser(microscope.abc.SerialDeviceMixin, microscope.abc.LightSource):
         self._write(b"SOURce:TEMPerature:APRobe OFF")
         self._flush_handshake()
 
+        self.connection.close()
+
     def initialize(self):
         # self.flush_buffer()
         # We ensure that handshaking is off.

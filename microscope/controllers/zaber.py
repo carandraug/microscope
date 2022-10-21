@@ -155,6 +155,10 @@ class _ZaberConnection:
         with self.lock:
             return self._serial.readline(size)
 
+    def close(self) -> None:
+        with self.lock:
+            self.close()
+
 
 class _ZaberDeviceConnection:
     """A Zaber connection to control a single device.
@@ -604,3 +608,7 @@ class ZaberDaisyChain(microscope.abc.Controller):
     @property
     def devices(self) -> typing.Dict[str, microscope.abc.Device]:
         return self._devices
+
+    def _do_shutdown(self) -> None:
+        super()._do_shutdown()
+        self._conn.close()

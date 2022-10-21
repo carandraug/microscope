@@ -62,24 +62,8 @@ class _iBeamConnection:
 
     """
 
-    def __init__(self, port: str):
-        # From the Toptica iBeam SMART manual:
-        # Direct connection via COMx with 115200,8,N,1 and serial
-        # interface handshake "none". That means that no hardware
-        # handshake (DTR, RTS) and no software handshake (XON,XOFF) of
-        # the underlying operating system is supported.
-        serial_conn = serial.Serial(
-            port=port,
-            baudrate=115200,
-            timeout=1.0,
-            bytesize=serial.EIGHTBITS,
-            stopbits=serial.STOPBITS_ONE,
-            parity=serial.PARITY_NONE,
-            xonxoff=False,
-            rtscts=False,
-            dsrdtr=False,
-        )
-        self._serial = microscope._utils.SharedSerial(serial_conn)
+    def __init__(self, serial: microscope._utils.SharedSerial):
+        self._serial = serial
 
         # We don't know what is the current verbosity state and so we
         # don't know yet what we should be reading back.  So blindly
@@ -215,7 +199,24 @@ class TopticaiBeam(
 
     def __init__(self, port: str, **kwargs) -> None:
         super().__init__(**kwargs)
-        self._conn = _iBeamConnection(port)
+        # From the Toptica iBeam SMART manual:
+        # Direct connection via COMx with 115200,8,N,1 and serial
+        # interface handshake "none". That means that no hardware
+        # handshake (DTR, RTS) and no software handshake (XON,XOFF) of
+        # the underlying operating system is supported.
+        self._serial_conn = serial.Serial(
+            port=port,
+            baudrate=115200,
+            timeout=1.0,
+            bytesize=serial.EIGHTBITS,
+            stopbits=serial.STOPBITS_ONE,
+            parity=serial.PARITY_NONE,
+            xonxoff=False,
+            rtscts=False,
+            dsrdtr=False,
+        )
+        self._conn = _iBeamConnection(self._serial_conn)
+
         # The Toptica iBeam has up to five operation modes, named
         # "channels" on the documentation.  Only the first three
         # channels have any sort of documentation:
@@ -230,7 +231,7 @@ class TopticaiBeam(
         self._max_power = self._conn.show_max_power()
 
     def _do_shutdown(self) -> None:
-        pass
+        self._serial_conn.close()
 
     def get_status(self) -> typing.List[str]:
         status: typing.List[str] = []

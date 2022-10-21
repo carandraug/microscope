@@ -116,6 +116,10 @@ class SharedSerial:
         self._lock = threading.RLock()
 
     @property
+    def closed(self) -> bool:
+        return self._serial.closed
+
+    @property
     def lock(self) -> threading.RLock:
         return self._lock
 
@@ -138,3 +142,7 @@ class SharedSerial:
     def write(self, data: bytes) -> int:
         with self._lock:
             return self._serial.write(data)
+
+    def close(self) -> None:
+        with self._lock:
+            self._serial.close()

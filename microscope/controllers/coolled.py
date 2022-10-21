@@ -306,11 +306,15 @@ class CoolLED(microscope.abc.Controller):
             rtscts=False,
             dsrdtr=False,
         )
-        shared_serial = microscope._utils.SharedSerial(serial_conn)
-        connection = _CoolLEDConnection(shared_serial)
+        self._shared_serial = microscope._utils.SharedSerial(serial_conn)
+        connection = _CoolLEDConnection(self._shared_serial)
         for name in connection.get_channels():
             self._channels[name] = _CoolLEDChannel(connection, name)
 
     @property
     def devices(self) -> typing.Dict[str, microscope.abc.Device]:
         return self._channels
+
+    def _do_shutdown(self) -> None:
+        super()._do_shutdown()
+        self._shared_serial.close()

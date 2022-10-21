@@ -77,6 +77,10 @@ class _ProScanIIIConnection:
             if not line.endswith(b"\rEND\r"):
                 raise RuntimeError("Failed to clear description")
 
+    def close(self) -> None:
+        with self._lock:
+            self._serial.close()
+
     def command(self, command: bytes) -> None:
         """Send command to device."""
         with self._lock:
@@ -224,6 +228,10 @@ class ProScanIII(microscope.abc.Controller):
     @property
     def devices(self) -> typing.Mapping[str, microscope.abc.Device]:
         return self._devices
+
+    def _do_shutdown(self) -> None:
+        super()._do_shutdown()
+        self._conn.close()
 
 
 class _ProScanIIIFilterWheel(microscope.abc.FilterWheel):

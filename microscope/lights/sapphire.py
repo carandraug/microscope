@@ -142,6 +142,7 @@ class SapphireLaser(
         # Disable laser.
         self._write(b"l=0")
         self.flush_buffer()
+        self.connection.close()
 
     #  Initialization to do when cockpit connects.
     @microscope.abc.SerialDeviceMixin.lock_comms

@@ -185,8 +185,8 @@ class SpectraIIILightEngine(microscope.abc.Controller):
             rtscts=False,
             dsrdtr=False,
         )
-        shared_serial = microscope._utils.SharedSerial(serial_conn)
-        connection = _SpectraIIIConnection(shared_serial)
+        self._shared_serial = microscope._utils.SharedSerial(serial_conn)
+        connection = _SpectraIIIConnection(self._shared_serial)
 
         for index, name in connection.get_channel_map():
             assert (
@@ -197,6 +197,10 @@ class SpectraIIILightEngine(microscope.abc.Controller):
     @property
     def devices(self) -> typing.Mapping[str, microscope.abc.Device]:
         return self._lights
+
+    def _do_shutdown(self) -> None:
+        super()._do_shutdown()
+        self._shared_serial.close()
 
 
 class _SpectraIIILightChannel(

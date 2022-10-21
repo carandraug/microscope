@@ -104,6 +104,7 @@ class CoboltLaser(
         self.disable()
         self.send(b"@cob0")
         self.connection.flushInput()
+        self.connection.close()
 
     #  Initialization to do when cockpit connects.
     @microscope.abc.SerialDeviceMixin.lock_comms

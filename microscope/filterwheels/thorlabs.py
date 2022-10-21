@@ -73,7 +73,8 @@ class ThorlabsFilterWheel(microscope.abc.FilterWheel):
         super().__init__(positions=position_count, **kwargs)
 
     def _do_shutdown(self) -> None:
-        pass
+        with self._lock:
+            self.connection.close()
 
     def _do_set_position(self, new_position: int) -> None:
         # Thorlabs positions start at 1, hence the +1
