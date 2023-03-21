@@ -423,11 +423,18 @@ class _ControllerStatusFlags(ctypes.Structure):
         ("unused63", ctypes.c_uint, 1),
     ]
 
-
+# Ctypes does not support passing unions or structures with bit-fields
+# to functions by value.  But we need to define a callback that will
+# take this Union.  So we define a callback that takes an uint64 and
+# do the conversion ourselves.  See #273.
+_ControllerStatusValue = uint64_t
 class _ControllerStatus(ctypes.Union):
     """ControllerStatus union from C headers"""
 
-    _fields_ = [("flags", _ControllerStatusFlags), ("value", _uint64_t)]
+    _fields_ = [
+        ("flags", _ControllerStatusFlags),
+        ("value", _ControllerStatusValue)
+    ]
 
 
 class _MDSStatusFlags(ctypes.Structure):
@@ -1000,8 +1007,8 @@ class _LinkamBase(microscope.abc.FloatingDeviceMixin, microscope.abc.Device):
                 "No linkam license file (Linkam.lsk) found in %s." % lpaths
             )
 
-        # NewValue event callback
-        cfunc = ctypes.CFUNCTYPE(_uint32_t, _CommsHandle, _ControllerStatus)(
+        # NewValue eventS callback
+        cfunc = ctypes.CFUNCTYPE(_uint32_t, _CommsHandle, _ControllerStatusValue)(
             __class__._on_new_value
         )
         _lib.linkamSetCallbackNewValue(cfunc)
@@ -1022,11 +1029,15 @@ class _LinkamBase(microscope.abc.FloatingDeviceMixin, microscope.abc.Device):
         __class__._callbacks[__class__._on_error] = cfunc
 
     @classmethod
-    def _on_new_value(cls, h: _CommsHandle, status: _ControllerStatus):
+    def _on_new_value(
+            cls, h: _CommsHandle, status_value: _ControllerStatusValue
+    ):
         """NewValue callback"""
         stage = cls._connectionMap.get(h, None)
         if not stage:
             return 0
+        status = _ControllerStatus()
+        status.value = status_value
         stage._update_status(status)
         return 1
 
